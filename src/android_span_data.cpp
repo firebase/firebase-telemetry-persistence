@@ -75,7 +75,7 @@ std::string jstring_to_string(JNIEnv* env, jstring src, std::size_t max_len) {
 
 jint cache_jni_globals(JNIEnv* env) {
   jclass span_class =
-      env->FindClass("com/firebase/appmon/otel/app/opentelemetry/Span");
+      env->FindClass("com/google/firebase/crashlytics/telemetry/Span");
   if (span_class == nullptr) {
     __android_log_print(ANDROID_LOG_ERROR, LOG_TAG,
                         "Failed to find span class");
@@ -94,7 +94,7 @@ jint cache_jni_globals(JNIEnv* env) {
   g_create_span_mid =
       env->GetStaticMethodID(g_span_class, "createRecoveredSpan",
                              "(JJJJJLjava/lang/String;[Ljava/lang/String;)Lcom/"
-                             "firebase/appmon/otel/app/opentelemetry/Span;");
+                             "google/firebase/crashlytics/telemetry/Span;");
   if (g_create_span_mid == nullptr) {
     return JNI_ERR;
   }
@@ -334,13 +334,13 @@ jint register_natives(JNIEnv* env) {
 
   // Native Method Table Registrations for CrashlyticsOtelContext
   jclass base_clazz = env->FindClass(
-      "com/firebase/appmon/otel/app/opentelemetry/CrashlyticsOtelContext");
+      "com/google/firebase/crashlytics/telemetry/CrashlyticsOtelContext");
   if (base_clazz != nullptr) {
     static const JNINativeMethod base_methods[] = {
         {"initializeNative", "(Ljava/lang/String;I)J",
          reinterpret_cast<void*>(initialize_native)},
         {"recoverSpansNative",
-         "(J)[Lcom/firebase/appmon/otel/app/opentelemetry/Span;",
+         "(J)[Lcom/google/firebase/crashlytics/telemetry/Span;",
          reinterpret_cast<void*>(recover_spans_native)},
         {"shutdownNative", "(J)V", reinterpret_cast<void*>(shutdown_native)},
     };
@@ -360,7 +360,7 @@ jint register_natives(JNIEnv* env) {
 
   // Native Method Table Registrations for MutationContext
   jclass mutable_clazz = env->FindClass(
-      "com/firebase/appmon/otel/app/opentelemetry/MutationContext");
+      "com/google/firebase/crashlytics/telemetry/MutationContext");
   if (mutable_clazz != nullptr) {
     static const JNINativeMethod mutable_methods[] = {
         {"addSpanNative", "(JJJJJJLjava/lang/String;[Ljava/lang/String;)V",
