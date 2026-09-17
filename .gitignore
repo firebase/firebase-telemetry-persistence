@@ -1,0 +1,28 @@
+# Build directories
+android-build/
+cmake-build-*/
+build-*/
+build/
+out/
+
+# JetBrains / CLion specific
+.idea/
+*.iws
+
+# VS Code specific
+.vscode/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Test files
+*.mmap
+
+# Swift Package manager
+.build/
+.swiftpm/
+Package.resolved
+
+# AI Agent custom rules
+.agents/
