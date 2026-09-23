@@ -38,7 +38,8 @@ let package = Package(
         "docs",
         "src/android_span_data.cpp",
       ],
-      sources: ["src"]
+      sources: ["src"],
+      publicHeadersPath: "include"
         // TODO: Add compiler and linker flags if needed as defined in CmakeLists.txt.
     ),
   ],
