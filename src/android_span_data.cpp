@@ -308,13 +308,13 @@ jlong JNICALL count_mutable_spans(JNIEnv* /* env */, jobject /* thiz */,
   return static_cast<jlong>(mutable_span_data->count());
 }
 
-const JNINativeMethod base_methods[] = {
+const JNINativeMethod telemetry_methods[] = {
     {"initializeNative", "(Ljava/lang/String;I)J",
      reinterpret_cast<void *>(initialize_native)},
     {"recoverSpansNative",
      "(J)[Lcom/google/firebase/crashlytics/telemetry/Span;",
      reinterpret_cast<void *>(recover_spans_native)},
-    {"shutdownNative", "(J)V", reinterpret_cast<void*>(shutdown_native)},
+    {"shutdownNative", "(J)V", reinterpret_cast<void *>(shutdown_native)},
 };
 
 const JNINativeMethod mutable_methods[] = {
@@ -331,14 +331,14 @@ jint register_natives(JNIEnv* env) {
     return JNI_ERR;
   }
 
-  // Native Method Table Registrations for CrashlyticsOtelContext
-  jclass base_clazz = env->FindClass(
-      "com/google/firebase/crashlytics/telemetry/CrashlyticsOtelContext");
-  if (base_clazz == nullptr) {
+  // Native Method Table Registrations for TelemetryContext
+  jclass telemetry_clazz = env->FindClass(
+      "com/google/firebase/crashlytics/telemetry/TelemetryContext");
+  if (telemetry_clazz == nullptr) {
     return JNI_ERR;
   }
-  if (env->RegisterNatives(base_clazz, base_methods,
-                           std::size(base_methods)) != JNI_OK) {
+  if (env->RegisterNatives(telemetry_clazz, telemetry_methods,
+                           std::size(telemetry_methods)) != JNI_OK) {
     return JNI_ERR;
   }
 
