@@ -70,6 +70,18 @@ std::string jstring_to_string(JNIEnv* env, jstring src, std::size_t max_len) {
   return result;
 }
 
+void release_jni_globals(JNIEnv* env) {
+  if (g_span_class != nullptr) {
+    env->DeleteGlobalRef(g_span_class);
+    g_span_class = nullptr;
+  }
+  if (g_string_class != nullptr) {
+    env->DeleteGlobalRef(g_string_class);
+    g_string_class = nullptr;
+  }
+  g_create_span_mid = nullptr;
+}
+
 jint cache_jni_globals(JNIEnv* env) {
   jclass span_class =
       env->FindClass("com/google/firebase/crashlytics/telemetry/Span");
@@ -81,6 +93,7 @@ jint cache_jni_globals(JNIEnv* env) {
 
   jclass string_class = env->FindClass("java/lang/String");
   if (string_class == nullptr) {
+    release_jni_globals(env);
     return JNI_ERR;
   }
   g_string_class = reinterpret_cast<jclass>(env->NewGlobalRef(string_class));
@@ -90,18 +103,12 @@ jint cache_jni_globals(JNIEnv* env) {
       env->GetStaticMethodID(g_span_class, "createRecoveredSpan",
                              "(JJJJJLjava/lang/String;[Ljava/lang/String;)Lcom/"
                              "google/firebase/crashlytics/telemetry/Span;");
-  return g_create_span_mid != nullptr ? JNI_OK : JNI_ERR;
-}
+if (g_create_span_mid == nullptr) {
+    release_jni_globals(env);
+    return JNI_ERR;
+  }
 
-void release_jni_globals(JNIEnv* env) {
-  if (g_span_class != nullptr) {
-    env->DeleteGlobalRef(g_span_class);
-    g_span_class = nullptr;
-  }
-  if (g_string_class != nullptr) {
-    env->DeleteGlobalRef(g_string_class);
-    g_string_class = nullptr;
-  }
+  return JNI_OK;
 }
 
 jobject create_jni_span_object(JNIEnv* env, const Span& span) {
@@ -335,10 +342,14 @@ jint register_natives(JNIEnv* env) {
   jclass telemetry_clazz = env->FindClass(
       "com/google/firebase/crashlytics/telemetry/TelemetryContext");
   if (telemetry_clazz == nullptr) {
+    release_jni_globals(env);
     return JNI_ERR;
   }
-  if (env->RegisterNatives(telemetry_clazz, telemetry_methods,
-                           std::size(telemetry_methods)) != JNI_OK) {
+  jint telemetry_reg = env->RegisterNatives(telemetry_clazz, telemetry_methods,
+                                            std::size(telemetry_methods));
+  env->DeleteLocalRef(telemetry_clazz);
+  if (telemetry_reg != JNI_OK) {
+    release_jni_globals(env);
     return JNI_ERR;
   }
 
@@ -346,10 +357,14 @@ jint register_natives(JNIEnv* env) {
   jclass mutable_clazz = env->FindClass(
       "com/google/firebase/crashlytics/telemetry/MutationContext");
   if (mutable_clazz == nullptr) {
+    release_jni_globals(env);
     return JNI_ERR;
   }
-  if (env->RegisterNatives(mutable_clazz, mutable_methods,
-                           std::size(mutable_methods)) != JNI_OK) {
+  jint mutable_reg = env->RegisterNatives(mutable_clazz, mutable_methods,
+                                          std::size(mutable_methods));
+  env->DeleteLocalRef(mutable_clazz);
+  if (mutable_reg != JNI_OK) {
+    release_jni_globals(env);
     return JNI_ERR;
   }
 
