@@ -148,7 +148,7 @@ let package = Package(
   dependencies: [
     // Without local changes
     .package(
-      url: "<TODO: insert git link>",
+      url: "https://github.com/firebase/firebase-telemetry-persistence.git",
       branch: "main"),
     // With local changes
     .package(name: "firebase-telemetry-persistence", path: "../../../firebase-telemetry-persistence"),
@@ -170,14 +170,11 @@ let package = Package(
 
 ## Source Code Headers
 
-Every file containing source code must include copyright and license
-information. This includes any JS/CSS files that you might be serving out to
-browsers. (This is to help well-intentioned people avoid accidental copying that
-doesn't comply with the license.)
+Every file containing source code (such as C++ `.cpp` and `.h` files) must include copyright and license information.
 
 Apache header:
 
-    Copyright 2024 Google LLC
+    Copyright 2026 Google LLC
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
