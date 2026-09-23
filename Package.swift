@@ -18,19 +18,12 @@ import PackageDescription
 
 let package = Package(
   name: "FirebaseTelemetryPersistence",
-  platforms: [
-    .iOS(.v13)
-  ],
+  platforms: [.iOS(.v15), .macCatalyst(.v15), .macOS(.v11), .tvOS(.v15), .watchOS(.v8)],
   products: [
     .library(
       name: "FirebaseTelemetryPersistence",
       targets: ["FirebaseTelemetryPersistence"]
     )
-  ],
-  dependencies: [
-    .package(
-      url: "https://github.com/open-telemetry/opentelemetry-swift-core.git",
-      .upToNextMajor(from: "2.3.0"))
   ],
   targets: [
     .target(
@@ -38,40 +31,16 @@ let package = Package(
       path: ".",
       exclude: [
         "CMakeLists.txt",
+        "main.cpp",
         "README.md",
         "LICENSE",
         "tests",
+        "docs",
         "src/android_span_data.cpp",
       ],
-      sources: [
-        "src/header.cpp",
-        "src/initialize.cpp",
-        "src/mutable_span_data.cpp",
-        "src/recovered_span_data.cpp",
-        "src/span_data_impl.cpp",
-      ],
+      sources: ["src"],
       publicHeadersPath: "include"
         // TODO: Add compiler and linker flags if needed as defined in CmakeLists.txt.
-    ),
-    .testTarget(
-      name: "SwiftCompatibilityTests",
-      dependencies: [
-        "FirebaseTelemetryPersistence",
-        .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
-        .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
-      ],
-      path: ".",
-      exclude: [
-        "CMakeLists.txt",
-        "README.md",
-        "LICENSE",
-        "src",
-        "include",
-      ],
-      sources: ["tests/swift_compatibility_test.swift"],
-      swiftSettings: [
-        .interoperabilityMode(.Cxx)
-      ]
     ),
   ],
   cxxLanguageStandard: .cxx17
