@@ -31,10 +31,10 @@ jclass g_span_class = nullptr;
 jclass g_string_class = nullptr;
 jmethodID g_create_span_mid = nullptr;
 
-constexpr std::size_t MAX_SPAN_NAME_LEN = 64;
-constexpr std::size_t MAX_ATTRIBUTE_KEY_LEN = 64;
-constexpr std::size_t MAX_ATTRIBUTE_VAL_LEN = 128;
-constexpr std::size_t MAX_FILE_PATH_LEN = 4096;
+constexpr std::size_t max_span_name_len = 64;
+constexpr std::size_t max_attribute_key_len = 64;
+constexpr std::size_t max_attribute_val_len = 128;
+constexpr std::size_t max_file_path_len = 4096;
 
 template <std::size_t MaxLen>
 jstring create_bounded_jstring(JNIEnv* env, std::string_view str) {
@@ -110,7 +110,7 @@ jobject create_jni_span_object(JNIEnv* env, const Span& span) {
     return nullptr;
   }
 
-  jstring name = create_bounded_jstring<MAX_SPAN_NAME_LEN>(env, span.name());
+  jstring name = create_bounded_jstring<max_span_name_len>(env, span.name());
   if (name == nullptr) {
     return nullptr;
   }
@@ -125,8 +125,8 @@ jobject create_jni_span_object(JNIEnv* env, const Span& span) {
 
   jsize index = 0;
   for (const auto& [key, val] : span.attributes()) {
-    jstring jkey = create_bounded_jstring<MAX_ATTRIBUTE_KEY_LEN>(env, key);
-    jstring jval = create_bounded_jstring<MAX_ATTRIBUTE_VAL_LEN>(env, val);
+    jstring jkey = create_bounded_jstring<max_attribute_key_len>(env, key);
+    jstring jval = create_bounded_jstring<max_attribute_val_len>(env, val);
 
     if (jkey != nullptr && jval != nullptr) {
       env->SetObjectArrayElement(attributes, index, jkey);
@@ -169,8 +169,8 @@ std::vector<std::pair<std::string, std::string>> parse_jni_attributes(
     jstring jval =
         static_cast<jstring>(env->GetObjectArrayElement(attributes, i));
     if (jkey != nullptr && jval != nullptr) {
-      attrs.emplace_back(jstring_to_string(env, jkey, MAX_ATTRIBUTE_KEY_LEN),
-                         jstring_to_string(env, jval, MAX_ATTRIBUTE_VAL_LEN));
+      attrs.emplace_back(jstring_to_string(env, jkey, max_attribute_key_len),
+                         jstring_to_string(env, jval, max_attribute_val_len));
     }
     if (jkey != nullptr) {
       env->DeleteLocalRef(jkey);
@@ -222,7 +222,7 @@ jlong JNICALL initialize_native(JNIEnv* env, jclass /* clazz */,
   }
 
   MmapSize mmap_size = static_cast<MmapSize>(size_ordinal);
-  std::string path = jstring_to_string(env, file_path, MAX_FILE_PATH_LEN);
+  std::string path = jstring_to_string(env, file_path, max_file_path_len);
 
   unspecified_context_t* context = initialize_span_data(path, mmap_size);
 
@@ -264,7 +264,7 @@ void JNICALL add_span(JNIEnv* env, jobject /* thiz */, jlong context_ptr,
            static_cast<std::uint64_t>(span_id),
            static_cast<std::uint64_t>(parent_span_id),
            static_cast<std::uint64_t>(start_time), 0,
-           jstring_to_string(env, name, MAX_SPAN_NAME_LEN),
+           jstring_to_string(env, name, max_span_name_len),
            parse_jni_attributes(env, attributes)));
 }
 
@@ -292,8 +292,8 @@ void JNICALL set_attribute_on_span(JNIEnv* env, jobject /* thiz */,
 
   std::uint64_t native_span_id = static_cast<std::uint64_t>(span_id);
   mutable_span_data->set_attribute_on_span(
-      native_span_id, jstring_to_string(env, key, MAX_ATTRIBUTE_KEY_LEN),
-      jstring_to_string(env, value, MAX_ATTRIBUTE_VAL_LEN));
+      native_span_id, jstring_to_string(env, key, max_attribute_key_len),
+      jstring_to_string(env, value, max_attribute_val_len));
 }
 
 jlong JNICALL count_mutable_spans(JNIEnv* /* env */, jobject /* thiz */,
