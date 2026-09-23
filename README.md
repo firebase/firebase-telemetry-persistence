@@ -170,7 +170,8 @@ let package = Package(
 
 ## Source Code Headers
 
-Every file containing source code (such as C++ \`.cpp\`/\`.h\` and Swift \`.swift\` files) must include copyright and license information.
+Every file containing source code (such as C++ `.cpp`/`.h` and Swift `.swift` files) must include copyright and license
+information.
 
 Apache header:
 
