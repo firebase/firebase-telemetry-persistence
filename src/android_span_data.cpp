@@ -315,7 +315,7 @@ jlong JNICALL count_mutable_spans(JNIEnv* /* env */, jobject /* thiz */,
   return static_cast<jlong>(mutable_span_data->count());
 }
 
-const JNINativeMethod telemetry_methods[] = {
+const JNINativeMethod persistence_methods[] = {
     {"initializeNative", "(Ljava/lang/String;I)J",
      reinterpret_cast<void *>(initialize_native)},
     {"recoverSpansNative",
@@ -338,17 +338,17 @@ jint register_natives(JNIEnv* env) {
     return JNI_ERR;
   }
 
-  // Native Method Table Registrations for TelemetryContext
-  jclass telemetry_clazz = env->FindClass(
-      "com/google/firebase/crashlytics/telemetry/TelemetryContext");
-  if (telemetry_clazz == nullptr) {
+  // Native Method Table Registrations for PersistenceContext
+  jclass persistence_clazz = env->FindClass(
+      "com/google/firebase/crashlytics/telemetry/PersistenceContext");
+  if (persistence_clazz == nullptr) {
     release_jni_globals(env);
     return JNI_ERR;
   }
-  jint telemetry_reg = env->RegisterNatives(telemetry_clazz, telemetry_methods,
-                                            std::size(telemetry_methods));
-  env->DeleteLocalRef(telemetry_clazz);
-  if (telemetry_reg != JNI_OK) {
+  jint persistence_reg = env->RegisterNatives(
+      persistence_clazz, persistence_methods, std::size(persistence_methods));
+  env->DeleteLocalRef(persistence_clazz);
+  if (persistence_reg != JNI_OK) {
     release_jni_globals(env);
     return JNI_ERR;
   }
