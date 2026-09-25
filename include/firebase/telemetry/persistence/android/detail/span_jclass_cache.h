@@ -21,7 +21,7 @@ namespace firebase::telemetry::persistence::android::detail {
 
 class SpanJClassCache {
 public:
-  SpanJClassCache();
+  SpanJClassCache() = default;
   explicit SpanJClassCache(JNIEnv* env);
   ~SpanJClassCache();
 
@@ -38,7 +38,7 @@ public:
   jmethodID span_create() const { return span_create_; }
 
 private:
-  JNIEnv* env_;
+  JavaVM* vm_ = nullptr;
 
   jclass span_class_ = nullptr;
   jclass string_class_ = nullptr;

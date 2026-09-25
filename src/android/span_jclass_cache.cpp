@@ -15,18 +15,30 @@
 #include "firebase/telemetry/persistence/android/detail/span_jclass_cache.h"
 
 namespace firebase::telemetry::persistence::android::detail {
+
 namespace {
+
+JNIEnv* current_env(JavaVM* vm) {
+  JNIEnv* env = nullptr;
+  if (vm == nullptr ||
+      vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6) != JNI_OK) {
+    return nullptr;
+  }
+  return env;
+}
+
 void release_global(JNIEnv* env, jobject ref) {
   if (env != nullptr && ref != nullptr) {
     env->DeleteGlobalRef(ref);
   }
 }
+
 }  // namespace
 
-SpanJClassCache::SpanJClassCache() : env_(nullptr) {}
-
-SpanJClassCache::SpanJClassCache(JNIEnv* env) : env_(env) {
-  if (env_ == nullptr) {
+SpanJClassCache::SpanJClassCache(JNIEnv* env) {
+  // Store the JavaVM* because the JNIEnv* is only valid on its thread
+  if (env == nullptr || env->GetJavaVM(&vm_) != JNI_OK) {
+    vm_ = nullptr;
     return;
   }
 
@@ -52,16 +64,17 @@ SpanJClassCache::SpanJClassCache(JNIEnv* env) : env_(env) {
 }
 
 SpanJClassCache::~SpanJClassCache() {
-  release_global(env_, span_class_);
-  release_global(env_, string_class_);
+  JNIEnv* env = current_env(vm_);
+  release_global(env, span_class_);
+  release_global(env, string_class_);
 }
 
 SpanJClassCache::SpanJClassCache(SpanJClassCache&& other)
-    : env_(other.env_),
+    : vm_(other.vm_),
       span_class_(other.span_class_),
       string_class_(other.string_class_),
       span_create_(other.span_create_) {
-  other.env_ = nullptr;
+  other.vm_ = nullptr;
   other.span_class_ = nullptr;
   other.string_class_ = nullptr;
   other.span_create_ = nullptr;
@@ -72,14 +85,15 @@ SpanJClassCache& SpanJClassCache::operator=(SpanJClassCache&& other) {
     return *this;
   }
 
-  release_global(env_, span_class_);
-  release_global(env_, string_class_);
+  JNIEnv* env = current_env(vm_);
+  release_global(env, span_class_);
+  release_global(env, string_class_);
 
-  env_ = other.env_;
+  vm_ = other.vm_;
   span_class_ = other.span_class_;
   string_class_ = other.string_class_;
   span_create_ = other.span_create_;
-  other.env_ = nullptr;
+  other.vm_ = nullptr;
   other.span_class_ = nullptr;
   other.string_class_ = nullptr;
   other.span_create_ = nullptr;
@@ -87,7 +101,7 @@ SpanJClassCache& SpanJClassCache::operator=(SpanJClassCache&& other) {
 }
 
 bool SpanJClassCache::is_initialized() const {
-  return env_ != nullptr &&
+  return vm_ != nullptr &&
          span_class_ != nullptr &&
          string_class_ != nullptr &&
          span_create_ != nullptr;
