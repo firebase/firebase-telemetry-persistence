@@ -30,6 +30,42 @@
 namespace firebase::telemetry::persistence::android::detail {
 namespace {
 
+jlong JNICALL initialize_native(JNIEnv* env, jclass /* clazz */,
+                                jstring file_path, jint size_ordinal);
+jobjectArray JNICALL recover_spans_native(JNIEnv* env, jclass /* clazz */,
+                                          jlong context_ptr);
+void JNICALL shutdown_native(JNIEnv* /* env */, jclass /* clazz */,
+                             jlong context_ptr);
+void JNICALL add_span(JNIEnv* env, jobject /* thiz */, jlong context_ptr,
+                      jlong trace_id_high, jlong trace_id_low, jlong span_id,
+                      jlong parent_span_id, jlong start_time, jstring name,
+                      jobjectArray attributes);
+void JNICALL end_span(JNIEnv* /* env */, jobject /* thiz */, jlong context_ptr,
+                      jlong span_id);
+void JNICALL set_attribute_on_span(JNIEnv* env, jobject /* thiz */,
+                                   jlong context_ptr, jlong span_id,
+                                   jstring key, jstring value);
+jlong JNICALL count_mutable_spans(JNIEnv* /* env */, jobject /* thiz */,
+                                  jlong context_ptr);
+
+const JNINativeMethod persistence_methods[] = {
+    {"initializeNative", "(Ljava/lang/String;I)J",
+     reinterpret_cast<void *>(initialize_native)},
+    {"recoverSpansNative",
+     "(J)[Lcom/google/firebase/crashlytics/telemetry/Span;",
+     reinterpret_cast<void *>(recover_spans_native)},
+    {"shutdownNative", "(J)V", reinterpret_cast<void *>(shutdown_native)},
+};
+
+const JNINativeMethod mutable_methods[] = {
+    {"addSpanNative", "(JJJJJJLjava/lang/String;[Ljava/lang/String;)V",
+     reinterpret_cast<void *>(add_span)},
+    {"endSpanNative", "(JJ)V", reinterpret_cast<void *>(end_span)},
+    {"setAttributeOnSpanNative", "(JJLjava/lang/String;Ljava/lang/String;)V",
+     reinterpret_cast<void *>(set_attribute_on_span)},
+    {"countSpansNative", "(J)J", reinterpret_cast<void *>(count_mutable_spans)},
+};
+
 SpanJClassCache g_span_cache;
 
 constexpr std::size_t max_span_name_len = 64;
@@ -237,24 +273,6 @@ jlong JNICALL count_mutable_spans(JNIEnv* /* env */, jobject /* thiz */,
 
   return static_cast<jlong>(mutable_span_data->count());
 }
-
-const JNINativeMethod persistence_methods[] = {
-    {"initializeNative", "(Ljava/lang/String;I)J",
-     reinterpret_cast<void *>(initialize_native)},
-    {"recoverSpansNative",
-     "(J)[Lcom/google/firebase/crashlytics/telemetry/Span;",
-     reinterpret_cast<void *>(recover_spans_native)},
-    {"shutdownNative", "(J)V", reinterpret_cast<void *>(shutdown_native)},
-};
-
-const JNINativeMethod mutable_methods[] = {
-    {"addSpanNative", "(JJJJJJLjava/lang/String;[Ljava/lang/String;)V",
-     reinterpret_cast<void *>(add_span)},
-    {"endSpanNative", "(JJ)V", reinterpret_cast<void *>(end_span)},
-    {"setAttributeOnSpanNative", "(JJLjava/lang/String;Ljava/lang/String;)V",
-     reinterpret_cast<void *>(set_attribute_on_span)},
-    {"countSpansNative", "(J)J", reinterpret_cast<void *>(count_mutable_spans)},
-};
 
 jint register_natives(JNIEnv* env) {
   if (cache_jni_globals(env) != JNI_OK) {
