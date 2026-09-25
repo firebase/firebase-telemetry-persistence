@@ -36,7 +36,8 @@ let package = Package(
         "LICENSE",
         "tests",
         "docs",
-        "src/android_span_data.cpp",
+        "src/android",
+        "include/firebase/telemetry/persistence/android",
       ],
       sources: ["src"],
       publicHeadersPath: "include"
