@@ -71,7 +71,8 @@ target_include_directories(firebase-telemetry-persistence PUBLIC
 
 if (ANDROID)
     target_sources(firebase-telemetry-persistence PRIVATE
-            src/android_span_data.cpp
+            src/android/android_span_data.cpp
+            src/android/span_jclass_cache.cpp
     )
 
     target_link_options(firebase-telemetry-persistence PRIVATE

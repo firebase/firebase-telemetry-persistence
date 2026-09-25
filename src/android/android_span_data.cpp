@@ -15,21 +15,23 @@
 #include <jni.h>
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <iterator>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+#include "firebase/telemetry/persistence/android/detail/span_jclass_cache.h"
 #include "firebase/telemetry/persistence/detail/copy_string.h"
 #include "firebase/telemetry/persistence/initialize.h"
 #include "firebase/telemetry/persistence/span.h"
 
-namespace firebase::telemetry::persistence {
+namespace firebase::telemetry::persistence::android::detail {
 namespace {
 
-jclass g_span_class = nullptr;
-jclass g_string_class = nullptr;
-jmethodID g_create_span_mid = nullptr;
+SpanJClassCache g_span_cache;
 
 constexpr std::size_t max_span_name_len = 64;
 constexpr std::size_t max_attribute_key_len = 64;
@@ -49,7 +51,7 @@ jstring create_bounded_jstring(JNIEnv* env, std::string_view str) {
 
   // String exceeds MaxLen or lacks null termination; copy & truncate safely
   char buf[MaxLen];
-  detail::copy_string(str, buf);
+  persistence::detail::copy_string(str, buf);
   return env->NewStringUTF(buf);
 }
 
@@ -70,50 +72,18 @@ std::string jstring_to_string(JNIEnv* env, jstring src, std::size_t max_len) {
   return result;
 }
 
-void release_jni_globals(JNIEnv* env) {
-  if (g_span_class != nullptr) {
-    env->DeleteGlobalRef(g_span_class);
-    g_span_class = nullptr;
-  }
-  if (g_string_class != nullptr) {
-    env->DeleteGlobalRef(g_string_class);
-    g_string_class = nullptr;
-  }
-  g_create_span_mid = nullptr;
-}
-
 jint cache_jni_globals(JNIEnv* env) {
-  jclass span_class =
-      env->FindClass("com/google/firebase/crashlytics/telemetry/Span");
-  if (span_class == nullptr) {
-    return JNI_ERR;
-  }
-  g_span_class = reinterpret_cast<jclass>(env->NewGlobalRef(span_class));
-  env->DeleteLocalRef(span_class);
-
-  jclass string_class = env->FindClass("java/lang/String");
-  if (string_class == nullptr) {
-    release_jni_globals(env);
-    return JNI_ERR;
-  }
-  g_string_class = reinterpret_cast<jclass>(env->NewGlobalRef(string_class));
-  env->DeleteLocalRef(string_class);
-
-  g_create_span_mid =
-      env->GetStaticMethodID(g_span_class, "createRecoveredSpan",
-                             "(JJJJJLjava/lang/String;[Ljava/lang/String;)Lcom/"
-                             "google/firebase/crashlytics/telemetry/Span;");
-if (g_create_span_mid == nullptr) {
-    release_jni_globals(env);
+  SpanJClassCache span_cache(env);
+  if (!span_cache.is_initialized()) {
     return JNI_ERR;
   }
 
+  g_span_cache = std::move(span_cache);
   return JNI_OK;
 }
 
 jobject create_jni_span_object(JNIEnv* env, const Span& span) {
-  if (g_span_class == nullptr || g_string_class == nullptr ||
-      g_create_span_mid == nullptr) {
+  if (!g_span_cache.is_initialized()) {
     return nullptr;
   }
 
@@ -124,7 +94,7 @@ jobject create_jni_span_object(JNIEnv* env, const Span& span) {
 
   jsize total_elements = static_cast<jsize>(span.attributes().size() * 2);
   jobjectArray attributes =
-      env->NewObjectArray(total_elements, g_string_class, nullptr);
+      env->NewObjectArray(total_elements, g_span_cache.string_class(), nullptr);
   if (attributes == nullptr) {
     env->DeleteLocalRef(name);
     return nullptr;
@@ -150,9 +120,9 @@ jobject create_jni_span_object(JNIEnv* env, const Span& span) {
   }
 
   jobject recovered_span_obj = env->CallStaticObjectMethod(
-      g_span_class, g_create_span_mid, span.trace_id().high,
-      span.trace_id().low, span.span_id(), span.parent_span_id(),
-      span.start_time(), name, attributes);
+      g_span_cache.span_class(), g_span_cache.span_create(),
+      span.trace_id().high, span.trace_id().low, span.span_id(),
+      span.parent_span_id(), span.start_time(), name, attributes);
 
   env->DeleteLocalRef(name);
   env->DeleteLocalRef(attributes);
@@ -191,7 +161,7 @@ std::vector<std::pair<std::string, std::string>> parse_jni_attributes(
 
 jobjectArray create_jni_span_objects_array(JNIEnv* env,
                                            const std::vector<Span>& spans) {
-  if (g_span_class == nullptr) {
+  if (!g_span_cache.is_initialized()) {
     return nullptr;
   }
 
@@ -206,7 +176,8 @@ jobjectArray create_jni_span_objects_array(JNIEnv* env,
   }
 
   jsize size = static_cast<jsize>(valid_spans.size());
-  jobjectArray spans_array = env->NewObjectArray(size, g_span_class, nullptr);
+  jobjectArray spans_array =
+      env->NewObjectArray(size, g_span_cache.span_class(), nullptr);
 
   if (spans_array == nullptr) {
     return nullptr;
@@ -220,7 +191,7 @@ jobjectArray create_jni_span_objects_array(JNIEnv* env,
   return spans_array;
 }
 
-// Lifecycle & Initialization Native Implementations -------------------------
+// Lifecycle & Initialization Native Implementations ---------------------------
 
 jlong JNICALL initialize_native(JNIEnv* env, jclass /* clazz */,
                                 jstring file_path, jint size_ordinal) {
@@ -252,7 +223,7 @@ void JNICALL shutdown_native(JNIEnv* /* env */, jclass /* clazz */,
   release_span_data(context);
 }
 
-// Mutable Context Native Implementations -------------------------------------
+// Mutable Context Native Implementations --------------------------------------
 
 void JNICALL add_span(JNIEnv* env, jobject /* thiz */, jlong context_ptr,
                       jlong trace_id_high, jlong trace_id_low, jlong span_id,
@@ -342,14 +313,12 @@ jint register_natives(JNIEnv* env) {
   jclass persistence_clazz = env->FindClass(
       "com/google/firebase/crashlytics/telemetry/PersistenceContext");
   if (persistence_clazz == nullptr) {
-    release_jni_globals(env);
     return JNI_ERR;
   }
   jint persistence_reg = env->RegisterNatives(
       persistence_clazz, persistence_methods, std::size(persistence_methods));
   env->DeleteLocalRef(persistence_clazz);
   if (persistence_reg != JNI_OK) {
-    release_jni_globals(env);
     return JNI_ERR;
   }
 
@@ -357,14 +326,12 @@ jint register_natives(JNIEnv* env) {
   jclass mutable_clazz = env->FindClass(
       "com/google/firebase/crashlytics/telemetry/MutationContext");
   if (mutable_clazz == nullptr) {
-    release_jni_globals(env);
     return JNI_ERR;
   }
   jint mutable_reg = env->RegisterNatives(mutable_clazz, mutable_methods,
                                           std::size(mutable_methods));
   env->DeleteLocalRef(mutable_clazz);
   if (mutable_reg != JNI_OK) {
-    release_jni_globals(env);
     return JNI_ERR;
   }
 
@@ -372,9 +339,8 @@ jint register_natives(JNIEnv* env) {
 }
 
 }  // namespace
-}  // namespace firebase::telemetry::persistence
 
-// Explicit JNI Lifecycle & Cache Initializations -----------------------------
+// Explicit JNI Lifecycle & Cache Initializations ------------------------------
 
 extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* /* reserved */) {
   JNIEnv* env = nullptr;
@@ -382,15 +348,7 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* /* reserved */) {
     return JNI_ERR;
   }
 
-  return firebase::telemetry::persistence::register_natives(env) == JNI_OK
-             ? JNI_VERSION_1_6
-             : JNI_ERR;
+  return register_natives(env) == JNI_OK ? JNI_VERSION_1_6 : JNI_ERR;
 }
 
-extern "C" JNIEXPORT void JNICALL JNI_OnUnload(JavaVM* vm,
-                                               void* /* reserved */) {
-  JNIEnv* env = nullptr;
-  if (vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6) == JNI_OK) {
-    firebase::telemetry::persistence::release_jni_globals(env);
-  }
-}
+}  // namespace firebase::telemetry::persistence::android::detail
