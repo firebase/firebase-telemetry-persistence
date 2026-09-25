@@ -81,8 +81,6 @@ if (ANDROID)
             "LINKER:--exclude-libs,ALL"
             "LINKER:--gc-sections"
     )
-
-    target_link_libraries(firebase-telemetry-persistence PRIVATE log)
 endif ()
 
 if (NOT ANDROID)
