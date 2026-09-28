@@ -71,7 +71,8 @@ public:
   }
 
   // Takes ownership of `value` local ref
-  ManagedJString(JNIEnv* env, jstring value) : env_(env), value_(value) {}
+  explicit ManagedJString(JNIEnv* env, jstring value)
+      : env_(env), value_(value) {}
 
   ~ManagedJString() {
     if (env_ != nullptr && value_ != nullptr) {

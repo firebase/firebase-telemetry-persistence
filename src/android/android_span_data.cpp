@@ -22,6 +22,7 @@
 #include <utility>
 #include <vector>
 
+#include "firebase/telemetry/persistence/android/detail/managed_jobject.h"
 #include "firebase/telemetry/persistence/android/detail/managed_jstring.h"
 #include "firebase/telemetry/persistence/android/detail/span_jclass_cache.h"
 #include "firebase/telemetry/persistence/initialize.h"
@@ -83,21 +84,21 @@ jint cache_jni_globals(JNIEnv* env) {
   return JNI_OK;
 }
 
-jobject create_jni_span_object(JNIEnv* env, const Span& span) {
+ManagedJObject create_jni_span_object(JNIEnv* env, const Span& span) {
   if (!g_span_cache.is_initialized()) {
-    return nullptr;
+    return {};
   }
 
   ManagedJString<max_span_name_len> name(env, span.name());
   if (!name) {
-    return nullptr;
+    return {};
   }
 
   jsize total_elements = static_cast<jsize>(span.attributes().size() * 2);
   jobjectArray attributes =
       env->NewObjectArray(total_elements, g_span_cache.string_class(), nullptr);
   if (attributes == nullptr) {
-    return nullptr;
+    return {};
   }
 
   jsize index = 0;
@@ -120,7 +121,7 @@ jobject create_jni_span_object(JNIEnv* env, const Span& span) {
 
   env->DeleteLocalRef(attributes);
 
-  return recovered_span_obj;
+  return ManagedJObject(env, recovered_span_obj);
 }
 
 std::vector<std::pair<std::string, std::string>> parse_jni_attributes(
@@ -137,8 +138,8 @@ std::vector<std::pair<std::string, std::string>> parse_jni_attributes(
     jobject key = env->GetObjectArrayElement(attributes, i - 1);
     jobject val = env->GetObjectArrayElement(attributes, i);
 
-    ManagedJString<max_attribute_key_len> jkey(env, key);
-    ManagedJString<max_attribute_val_len> jval(env, val);
+    ManagedJString<max_attribute_key_len> jkey(env, static_cast<jstring>(key));
+    ManagedJString<max_attribute_val_len> jval(env, static_cast<jstring>(val));
 
     if (jkey && jval) {
       attrs.emplace_back(jkey, jval);
@@ -153,27 +154,22 @@ jobjectArray create_jni_span_objects_array(JNIEnv* env,
     return nullptr;
   }
 
-  std::vector<jobject> valid_spans;
-  valid_spans.reserve(spans.size());
-
-  for (const Span& span : spans) {
-    jobject jspan = create_jni_span_object(env, span);
-    if (jspan != nullptr) {
-      valid_spans.push_back(jspan);
-    }
-  }
+  std::vector<ManagedJObject> valid_spans(spans.size());
+  std::transform(
+      spans.begin(), spans.end(), valid_spans.begin(),
+      [&](const Span& span) { return create_jni_span_object(env, span); });
+  valid_spans.erase(
+      std::remove(valid_spans.begin(), valid_spans.end(), nullptr),
+      valid_spans.end());
 
   jsize size = static_cast<jsize>(valid_spans.size());
   jobjectArray spans_array =
       env->NewObjectArray(size, g_span_cache.span_class(), nullptr);
 
-  if (spans_array == nullptr) {
-    return nullptr;
-  }
-
-  for (jsize i = 0; i < size; ++i) {
-    env->SetObjectArrayElement(spans_array, i, valid_spans[i]);
-    env->DeleteLocalRef(valid_spans[i]);
+  if (spans_array != nullptr) {
+    for (jsize i = 0; i < size; ++i) {
+      env->SetObjectArrayElement(spans_array, i, valid_spans[i]);
+    }
   }
 
   return spans_array;
