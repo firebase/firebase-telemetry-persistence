@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef __FIREBASE_TELEMETRY_PERSISTENCE_MANAGED_JSTRING_H__
-#define __FIREBASE_TELEMETRY_PERSISTENCE_MANAGED_JSTRING_H__
+#ifndef __FIREBASE_TELEMETRY_PERSISTENCE_ANDROID_DETAIL_MANAGED_JSTRING_H__
+#define __FIREBASE_TELEMETRY_PERSISTENCE_ANDROID_DETAIL_MANAGED_JSTRING_H__
 
 #include <jni.h>
 
@@ -73,10 +73,6 @@ public:
   // Takes ownership of `value` local ref
   ManagedJString(JNIEnv* env, jstring value) : env_(env), value_(value) {}
 
-  // Takes ownership of `value`, which must be a jstring local ref
-  ManagedJString(JNIEnv* env, jobject value)
-      : ManagedJString(env, static_cast<jstring>(value)) {}
-
   ~ManagedJString() {
     if (env_ != nullptr && value_ != nullptr) {
       env_->DeleteLocalRef(value_);
@@ -104,4 +100,4 @@ private:
 
 }  // namespace firebase::telemetry::persistence::android::detail
 
-#endif  //__FIREBASE_TELEMETRY_PERSISTENCE_MANAGED_JSTRING_H__
+#endif  //__FIREBASE_TELEMETRY_PERSISTENCE_ANDROID_DETAIL_MANAGED_JSTRING_H__
