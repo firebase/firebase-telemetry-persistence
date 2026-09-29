@@ -14,7 +14,6 @@
 
 #include <jni.h>
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <iterator>
@@ -95,9 +94,10 @@ ManagedJObject create_jni_span_object(JNIEnv* env, const Span& span) {
   }
 
   jsize total_elements = static_cast<jsize>(span.attributes().size() * 2);
-  jobjectArray attributes =
-      env->NewObjectArray(total_elements, g_span_cache.string_class(), nullptr);
-  if (attributes == nullptr) {
+  ManagedJObjectArray attributes(
+      env, env->NewObjectArray(total_elements, g_span_cache.string_class(),
+                               nullptr));
+  if (!attributes) {
     return {};
   }
 
@@ -117,11 +117,9 @@ ManagedJObject create_jni_span_object(JNIEnv* env, const Span& span) {
       g_span_cache.span_class(), g_span_cache.span_create(),
       span.trace_id().high, span.trace_id().low, span.span_id(),
       span.parent_span_id(), span.start_time(), static_cast<jstring>(name),
-      attributes);
+      static_cast<jobjectArray>(attributes));
 
-  env->DeleteLocalRef(attributes);
-
-  return ManagedJObject(env, recovered_span_obj);
+  return ManagedJObject{env, recovered_span_obj};
 }
 
 std::vector<std::pair<std::string, std::string>> parse_jni_attributes(
@@ -154,13 +152,13 @@ jobjectArray create_jni_span_objects_array(JNIEnv* env,
     return nullptr;
   }
 
-  std::vector<ManagedJObject> valid_spans(spans.size());
-  std::transform(
-      spans.begin(), spans.end(), valid_spans.begin(),
-      [&](const Span& span) { return create_jni_span_object(env, span); });
-  valid_spans.erase(
-      std::remove(valid_spans.begin(), valid_spans.end(), nullptr),
-      valid_spans.end());
+  std::vector<ManagedJObject> valid_spans;
+  valid_spans.reserve(spans.size());
+  for (const Span& span : spans) {
+    if (ManagedJObject jspan = create_jni_span_object(env, span)) {
+      valid_spans.push_back(std::move(jspan));
+    }
+  }
 
   jsize size = static_cast<jsize>(valid_spans.size());
   jobjectArray spans_array =

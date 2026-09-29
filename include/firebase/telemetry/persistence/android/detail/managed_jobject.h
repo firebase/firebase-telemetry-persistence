@@ -17,55 +17,12 @@
 
 #include <jni.h>
 
+#include "firebase/telemetry/persistence/android/detail/managed_local_ref.h"
+
 namespace firebase::telemetry::persistence::android::detail {
-class ManagedJObject {
-public:
-  ManagedJObject() : env_(nullptr), value_(nullptr) {}
 
-  // Takes ownership of `value` local ref
-  explicit ManagedJObject(JNIEnv* env, jobject value)
-      : env_(env), value_(value) {}
-
-  ~ManagedJObject() {
-    if (env_ != nullptr && value_ != nullptr) {
-      env_->DeleteLocalRef(value_);
-    }
-  }
-
-  ManagedJObject(const ManagedJObject& other) = delete;
-  ManagedJObject& operator=(const ManagedJObject& other) = delete;
-
-  ManagedJObject(ManagedJObject&& other)
-      : env_(other.env_), value_(other.value_) {
-    other.env_ = nullptr;
-    other.value_ = nullptr;
-  }
-
-  ManagedJObject& operator=(ManagedJObject&& other) {
-    if (this == &other) {
-      return *this;
-    }
-
-    if (env_ != nullptr && value_ != nullptr) {
-      env_->DeleteLocalRef(value_);
-    }
-
-    env_ = other.env_;
-    value_ = other.value_;
-    other.env_ = nullptr;
-    other.value_ = nullptr;
-
-    return *this;
-  }
-
-  explicit operator bool() const { return value_ != nullptr; }
-
-  operator jobject() const { return value_; }
-
-private:
-  JNIEnv* env_;
-  jobject value_;
-};
+using ManagedJObject = ManagedLocalRef<jobject>;
+using ManagedJObjectArray = ManagedLocalRef<jobjectArray>;
 
 }  // namespace firebase::telemetry::persistence::android::detail
 

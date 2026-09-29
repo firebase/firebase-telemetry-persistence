@@ -16,6 +16,9 @@
 // headers, which need <jni.h>, into the module on Apple platforms
 module FirebaseTelemetryPersistence {
   umbrella "firebase"
+  exclude header "firebase/telemetry/persistence/android/detail/managed_jobject.h"
+  exclude header "firebase/telemetry/persistence/android/detail/managed_jstring.h"
+  exclude header "firebase/telemetry/persistence/android/detail/managed_local_ref.h"
   exclude header "firebase/telemetry/persistence/android/detail/span_jclass_cache.h"
   export *
 }

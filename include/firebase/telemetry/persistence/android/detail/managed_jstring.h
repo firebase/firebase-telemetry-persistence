@@ -22,9 +22,11 @@
 #include <string>
 #include <string_view>
 
+#include "firebase/telemetry/persistence/android/detail/managed_local_ref.h"
 #include "firebase/telemetry/persistence/detail/copy_string.h"
 
 namespace firebase::telemetry::persistence::android::detail {
+
 template <std::size_t MaxLen>
 jstring create_bounded_jstring(JNIEnv* env, std::string_view str) {
   if (env == nullptr) {
@@ -61,42 +63,16 @@ inline std::string jstring_to_string(JNIEnv* env, jstring src,
 }
 
 template <std::size_t MaxLen>
-class ManagedJString {
+class ManagedJString : public ManagedLocalRef<jstring> {
 public:
+  using ManagedLocalRef::ManagedLocalRef;
+
   ManagedJString(JNIEnv* env, std::string_view value)
-      : env_(env), value_(nullptr) {
-    if (env_ != nullptr) {
-      value_ = create_bounded_jstring<MaxLen>(env, value);
-    }
-  }
-
-  // Takes ownership of `value` local ref
-  explicit ManagedJString(JNIEnv* env, jstring value)
-      : env_(env), value_(value) {}
-
-  ~ManagedJString() {
-    if (env_ != nullptr && value_ != nullptr) {
-      env_->DeleteLocalRef(value_);
-    }
-  }
-
-  ManagedJString(const ManagedJString& other) = delete;
-  ManagedJString(ManagedJString&& other) = delete;
-
-  ManagedJString& operator=(const ManagedJString& other) = delete;
-  ManagedJString& operator=(ManagedJString&& other) = delete;
-
-  explicit operator bool() const { return value_ != nullptr; }
-
-  operator jstring() const { return value_; }
+      : ManagedLocalRef(env, create_bounded_jstring<MaxLen>(env, value)) {}
 
   operator std::string() const {
     return jstring_to_string(env_, value_, MaxLen);
   }
-
-private:
-  JNIEnv* env_;
-  jstring value_;
 };
 
 }  // namespace firebase::telemetry::persistence::android::detail
