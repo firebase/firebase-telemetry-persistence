@@ -315,4 +315,10 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* /* reserved */) {
   return register_natives(env) == JNI_OK ? JNI_VERSION_1_6 : JNI_ERR;
 }
 
+extern "C" JNIEXPORT void JNICALL JNI_OnUnload(JavaVM* /* vm */,
+                                               void* /* reserved */) {
+  // Delete the cached global refs while the VM is still usable
+  g_span_cache = SpanJClassCache();
+}
+
 }  // namespace firebase::telemetry::persistence::android::detail
