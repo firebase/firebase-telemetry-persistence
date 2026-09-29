@@ -20,7 +20,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <string>
-#include <string_view>
 
 #include "firebase/telemetry/persistence/android/detail/managed_local_ref.h"
 #include "firebase/telemetry/persistence/detail/copy_string.h"
@@ -28,17 +27,17 @@
 namespace firebase::telemetry::persistence::android::detail {
 
 template <std::size_t MaxLen>
-jstring create_bounded_jstring(JNIEnv* env, std::string_view str) {
+jstring create_bounded_jstring(JNIEnv* env, const std::string& str) {
   if (env == nullptr) {
     return nullptr;
   }
 
-  // If string is within safe bounds and null-terminated, pass directly
-  if (str.size() < MaxLen && str.data()[str.size()] == '\0') {
-    return env->NewStringUTF(str.data());
+  // If string is within safe bounds, pass directly
+  if (str.size() < MaxLen) {
+    return env->NewStringUTF(str.c_str());
   }
 
-  // String exceeds MaxLen or lacks null termination; copy & truncate safely
+  // String exceeds MaxLen, copy & truncate it safely
   char buf[MaxLen] = {};
   persistence::detail::copy_string(str, buf);
   return env->NewStringUTF(buf);
@@ -67,7 +66,7 @@ class ManagedJString : public ManagedLocalRef<jstring> {
 public:
   using ManagedLocalRef::ManagedLocalRef;
 
-  ManagedJString(JNIEnv* env, std::string_view value)
+  ManagedJString(JNIEnv* env, const std::string& value)
       : ManagedLocalRef(env, create_bounded_jstring<MaxLen>(env, value)) {}
 
   operator std::string() const {
