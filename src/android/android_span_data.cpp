@@ -318,7 +318,7 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* /* reserved */) {
 extern "C" JNIEXPORT void JNICALL JNI_OnUnload(JavaVM* /* vm */,
                                                void* /* reserved */) {
   // Delete the cached global refs while the VM is still usable
-  g_span_cache = SpanJClassCache();
+  g_span_cache.release();
 }
 
 }  // namespace firebase::telemetry::persistence::android::detail

@@ -33,6 +33,8 @@ public:
 
   bool is_initialized() const;
 
+  void release();
+
   jclass span_class() const { return span_class_; }
   jclass string_class() const { return string_class_; }
   jmethodID span_create() const { return span_create_; }

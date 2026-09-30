@@ -64,9 +64,7 @@ SpanJClassCache::SpanJClassCache(JNIEnv* env) {
 }
 
 SpanJClassCache::~SpanJClassCache() {
-  JNIEnv* env = current_env(vm_);
-  release_global(env, span_class_);
-  release_global(env, string_class_);
+  release();
 }
 
 SpanJClassCache::SpanJClassCache(SpanJClassCache&& other)
@@ -85,9 +83,7 @@ SpanJClassCache& SpanJClassCache::operator=(SpanJClassCache&& other) {
     return *this;
   }
 
-  JNIEnv* env = current_env(vm_);
-  release_global(env, span_class_);
-  release_global(env, string_class_);
+  release();
 
   vm_ = other.vm_;
   span_class_ = other.span_class_;
@@ -105,6 +101,17 @@ bool SpanJClassCache::is_initialized() const {
          span_class_ != nullptr &&
          string_class_ != nullptr &&
          span_create_ != nullptr;
+}
+
+void SpanJClassCache::release() {
+  JNIEnv* env = current_env(vm_);
+  release_global(env, span_class_);
+  release_global(env, string_class_);
+
+  vm_ = nullptr;
+  span_class_ = nullptr;
+  string_class_ = nullptr;
+  span_create_ = nullptr;
 }
 
 }  // namespace firebase::telemetry::persistence::android::detail
