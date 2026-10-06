@@ -23,7 +23,7 @@ Use these instructions to work on the library logic itself on your host machine
 ### Prerequisites
 
 - A C++17 compliant compiler
-- CMake (version 3.24 or higher)
+- CMake (version 3.22 or higher)
 
 ### Building
 
@@ -48,32 +48,6 @@ Alternatively, you can run the test executable directly:
 ./build/unit_tests
 ```
 
-### Memory Leak Detection
-
-#### ASan (Linux)
-
-Build the project with `ENABLE_ASAN` enabled and run it normally on Linux:
-
-```bash
-cmake -S . -B build -DENABLE_ASAN=ON 
-cmake --build build
-
-./build/unit_tests
-./build/main
-```
-
-#### Leaks (macOS)
-
-Build the project with `ENABLE_FRAME_POINTER` enabled, and use `leaks` to run it on macOS:
-
-```bash
-cmake -S . -B build -DENABLE_FRAME_POINTER=ON 
-cmake --build build
-
-leaks --atExit -- ./build/unit_tests
-leaks --atExit -- ./build/main
-```
-
 ### Running the Scratchpad
 
 Use `main.cpp` for quick testing:
@@ -81,6 +55,35 @@ Use `main.cpp` for quick testing:
 ```shell
 ./build/main
 ```
+
+### Memory Leak Detection
+
+#### ASan
+
+Build the project with `ENABLE_ASAN` enabled and run it normally:
+
+```bash
+cmake -S . -B build-asan -DENABLE_ASAN=ON
+cmake --build build-asan
+
+./build-asan/unit_tests
+./build-asan/main
+```
+
+#### Leaks (macOS)
+
+On macOS, ASan detects memory errors but not leaks. Instead, build the project with `ENABLE_FRAME_POINTER` enabled and
+run it with `leaks`:
+
+```bash
+cmake -S . -B build-leaks -DENABLE_FRAME_POINTER=ON
+cmake --build build-leaks
+
+MallocScribble=1 leaks --atExit -- ./build-leaks/unit_tests
+MallocScribble=1 leaks --atExit -- ./build-leaks/main
+```
+
+The "process is not debuggable" warning is expected and doesn't affect leak detection
 
 ---
 

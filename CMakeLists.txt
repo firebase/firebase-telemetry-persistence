@@ -12,12 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-cmake_minimum_required(VERSION 3.22)
+cmake_minimum_required(VERSION 3.22...3.24)
 project(firebase-telemetry-persistence VERSION 0.1.0 LANGUAGES CXX)
-
-if (POLICY CMP0135)
-    cmake_policy(SET CMP0135 NEW)
-endif ()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -35,7 +31,7 @@ if (ENABLE_FRAME_POINTER OR ENABLE_ASAN)
     set(FRAME_POINTER_FLAG "-fno-omit-frame-pointer")
 endif ()
 
-add_library(firebase-telemetry-persistence SHARED
+add_library(firebase-telemetry-persistence-objects OBJECT
         src/header.cpp
         src/initialize.cpp
         src/mutable_span_data.cpp
@@ -43,7 +39,8 @@ add_library(firebase-telemetry-persistence SHARED
         src/span_data_impl.cpp
 )
 
-target_compile_options(firebase-telemetry-persistence PRIVATE
+add_library(firebase-telemetry-persistence-flags INTERFACE)
+target_compile_options(firebase-telemetry-persistence-flags INTERFACE
         -Wall -Wextra -Wpedantic -Werror
         -Os
         -fPIC
@@ -64,13 +61,17 @@ target_compile_options(firebase-telemetry-persistence PRIVATE
         ${FRAME_POINTER_FLAG}
 )
 
-target_include_directories(firebase-telemetry-persistence PUBLIC
+target_link_libraries(firebase-telemetry-persistence-objects PRIVATE firebase-telemetry-persistence-flags)
+target_include_directories(firebase-telemetry-persistence-objects PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
 )
 
+add_library(firebase-telemetry-persistence SHARED)
+target_link_libraries(firebase-telemetry-persistence PUBLIC firebase-telemetry-persistence-objects)
+
 if (ANDROID)
-    target_sources(firebase-telemetry-persistence PRIVATE
+    target_sources(firebase-telemetry-persistence-objects PRIVATE
             src/android/android_span_data.cpp
             src/android/span_jclass_cache.cpp
     )
@@ -85,12 +86,11 @@ if (ANDROID)
 endif ()
 
 if (NOT ANDROID)
-    add_executable(main
-            main.cpp
-            src/initialize.cpp
-            src/span_data_impl.cpp
+    add_executable(main main.cpp)
+    target_link_libraries(main PRIVATE
+            firebase-telemetry-persistence-objects
+            firebase-telemetry-persistence-flags
     )
-    target_link_libraries(main PRIVATE firebase-telemetry-persistence)
 
     include(FetchContent)
     FetchContent_Declare(
@@ -103,9 +103,6 @@ if (NOT ANDROID)
     enable_testing()
 
     add_executable(unit_tests
-            src/header.cpp # visible for testing
-            src/initialize.cpp # visible for testing
-            src/span_data_impl.cpp # visible for testing
             tests/copy_string_tests.cpp
             tests/header_tests.cpp
             tests/initialize_tests.cpp
@@ -118,7 +115,7 @@ if (NOT ANDROID)
             tests/span_data_impl_tests.cpp
             tests/span_tests.cpp
     )
-    target_link_libraries(unit_tests PRIVATE firebase-telemetry-persistence GTest::gtest_main)
+    target_link_libraries(unit_tests PRIVATE firebase-telemetry-persistence-objects GTest::gtest_main)
 
     include(GoogleTest)
     gtest_discover_tests(unit_tests)
