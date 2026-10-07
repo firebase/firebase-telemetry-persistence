@@ -51,16 +51,16 @@ inline SpanDataImpl make_span_data(MmapSize size) {
 }
 
 inline std::string get_attribute(const Span& span, std::string_view key) {
-  auto attrs = span.attributes();
+  const auto& attrs = span.attributes();
   auto it = std::find_if(attrs.begin(), attrs.end(),
                          [key](const auto& p) { return p.first == key; });
   return (it != attrs.end()) ? it->second : "";
 }
 
-inline Span simple_span(
-    std::uint64_t span_id = 1, const std::string& name = "",
-    const std::vector<std::pair<std::string, std::string>>& attributes = {},
-    std::uint64_t start_time = 0, std::uint64_t end_time = 0) {
+inline Span simple_span(std::uint64_t span_id = 1, const std::string& name = "",
+                        const AttributesList& attributes = {},
+                        std::uint64_t start_time = 0,
+                        std::uint64_t end_time = 0) {
   return Span({0, 0}, span_id, 0, start_time, end_time, name, attributes);
 }
 

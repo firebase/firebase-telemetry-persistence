@@ -122,9 +122,8 @@ ManagedJObject create_jni_span_object(JNIEnv* env, const Span& span) {
   return ManagedJObject{env, recovered_span_obj};
 }
 
-std::vector<std::pair<std::string, std::string>> parse_jni_attributes(
-    JNIEnv* env, jobjectArray attributes) {
-  std::vector<std::pair<std::string, std::string>> attrs;
+AttributesList parse_jni_attributes(JNIEnv* env, jobjectArray attributes) {
+  AttributesList attrs;
   if (attributes == nullptr) {
     return attrs;
   }

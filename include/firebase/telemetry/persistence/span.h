@@ -31,7 +31,6 @@
 
 namespace firebase::telemetry::persistence {
 
-// This is required for using these in Swift
 using AttributesList = std::vector<std::pair<std::string, std::string>>;
 
 // Represents a 128-bit otel trace id, split for performance and interop
@@ -48,7 +47,7 @@ public:
   Span(TraceId trace_id, std::uint64_t span_id, std::uint64_t parent_span_id,
        std::uint64_t start_time, std::uint64_t end_time,
        const std::string& name,
-       const std::vector<std::pair<std::string, std::string>>& attributes);
+       const AttributesList& attributes);
 
   template <MmapSize Size>
   explicit Span(const detail::RawSpan<Size>& raw_span);
@@ -62,9 +61,8 @@ public:
   std::uint64_t start_time() const { return start_time_; }
   std::uint64_t end_time() const { return end_time_; }
 
-  // These return values instead of references for compatibility with Swift
-  std::string name() const { return name_; }
-  std::vector<std::pair<std::string, std::string>> attributes() const {
+  const std::string& name() const { return name_; }
+  const AttributesList& attributes() const {
     return attributes_;
   }
 
@@ -76,7 +74,7 @@ private:
   std::uint64_t end_time_;
 
   std::string name_;
-  std::vector<std::pair<std::string, std::string>> attributes_;
+  AttributesList attributes_;
 };
 
 // Implementation --------------------------------------------------------------
@@ -84,7 +82,7 @@ private:
 inline Span::Span(
     TraceId trace_id, std::uint64_t span_id, std::uint64_t parent_span_id,
     std::uint64_t start_time, std::uint64_t end_time, const std::string& name,
-    const std::vector<std::pair<std::string, std::string>>& attributes)
+    const AttributesList& attributes)
     : trace_id_(trace_id),
       span_id_(span_id),
       parent_span_id_(parent_span_id),
