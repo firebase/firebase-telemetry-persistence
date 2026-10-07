@@ -47,7 +47,7 @@ TEST(SpanTest, ToRawSpanBasic) {
 }
 
 TEST(SpanTest, ToRawSpanAttributeOverflow) {
-  std::vector<std::pair<std::string, std::string>> attributes;
+  AttributesList attributes;
   for (int i = 0; i < 20; ++i) {
     attributes.emplace_back("key" + std::to_string(i), "val");
   }
