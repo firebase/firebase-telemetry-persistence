@@ -34,7 +34,6 @@ jobs:
         with:
           ndk-version: r28c
           add-to-path: false
-          local-cache: true
 
       - name: Configure
         run: >
