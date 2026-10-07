@@ -51,7 +51,7 @@ inline SpanDataImpl make_span_data(MmapSize size) {
 }
 
 inline std::string get_attribute(const Span& span, std::string_view key) {
-  auto attrs = span.attributes();
+  const auto& attrs = span.attributes();
   auto it = std::find_if(attrs.begin(), attrs.end(),
                          [key](const auto& p) { return p.first == key; });
   return (it != attrs.end()) ? it->second : "";
