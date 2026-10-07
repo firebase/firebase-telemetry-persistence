@@ -24,7 +24,7 @@ option(ENABLE_FRAME_POINTER "Enable Leaks" OFF)
 
 set(FRAME_POINTER_FLAG "-fomit-frame-pointer")
 if (ENABLE_ASAN)
-    add_compile_options(-fsanitize=undefined -fsanitize=address -fno-omit-frame-pointer)
+    add_compile_options(-fsanitize=undefined -fsanitize=address -fno-sanitize=vptr -fno-omit-frame-pointer)
     add_link_options(-fsanitize=undefined -fsanitize=address)
 endif ()
 if (ENABLE_FRAME_POINTER OR ENABLE_ASAN)
