@@ -15,6 +15,7 @@
 #ifndef __FIREBASE_TELEMETRY_PERSISTENCE_DETAIL_ENTRY_H__
 #define __FIREBASE_TELEMETRY_PERSISTENCE_DETAIL_ENTRY_H__
 
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 
@@ -40,7 +41,11 @@ inline bool is_tag_valid(Entry::Tag tag) {
   return tag <= Entry::Tag::Log;
 }
 
+// Returns a view of the entry at `data`, which must point into a writable mmap
+// with at least sizeof (Entry) bytes remaining. An unknown tag is healed to
+// Empty so the entry is skipped on recovery, and the file matches what was read
 inline Entry* read_entry(std::byte* data) {
+  assert(data != nullptr);
   Entry* entry = reinterpret_cast<Entry *>(data);
   if (!is_tag_valid(entry->tag)) {
     entry->tag = Entry::Tag::Empty;
