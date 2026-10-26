@@ -44,6 +44,10 @@ TEST(EntryTest, IsTagValid) {
   EXPECT_FALSE(is_tag_valid(static_cast<Entry::Tag>(UINT32_MAX)));
 }
 
+TEST(EntryTest, ReadEntryNullDataReturnsNull) {
+  EXPECT_EQ(nullptr, read_entry(nullptr));
+}
+
 TEST(EntryTest, ReadEntryReturnsPointerIntoData) {
   std::uint32_t data[] = {3, 20};
   Entry* entry = read_entry(reinterpret_cast<std::byte *>(data));
