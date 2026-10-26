@@ -104,6 +104,7 @@ if (NOT ANDROID)
 
     add_executable(unit_tests
             tests/copy_string_tests.cpp
+            tests/entry_tests.cpp
             tests/header_tests.cpp
             tests/initialize_tests.cpp
             tests/managed_mmap_tests.cpp
