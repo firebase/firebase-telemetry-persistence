@@ -34,7 +34,7 @@ struct __attribute__((packed)) Entry {
 };
 
 static_assert(sizeof (Entry) == 8,
-              "Size of struct `Entry` is not one word");
+              "Size of struct `Entry` is not 8 bytes");
 
 inline bool is_tag_valid(Entry::Tag tag) {
   // Tag::Log is the largest valid enum value
