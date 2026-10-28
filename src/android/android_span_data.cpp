@@ -129,7 +129,7 @@ AttributesList parse_jni_attributes(JNIEnv* env, jobjectArray attributes) {
   }
 
   jsize len = env->GetArrayLength(attributes);
-  attrs.reserve(len / 2);
+  attrs.reserve(static_cast<std::size_t>(len / 2));
 
   for (jsize i = 1; i < len; i += 2) {
     jobject key = env->GetObjectArrayElement(attributes, i - 1);
@@ -151,21 +151,17 @@ jobjectArray create_jni_span_objects_array(JNIEnv* env,
     return nullptr;
   }
 
-  std::vector<ManagedJObject> valid_spans;
-  valid_spans.reserve(spans.size());
-  for (const Span& span : spans) {
-    if (ManagedJObject jspan = create_jni_span_object(env, span)) {
-      valid_spans.push_back(std::move(jspan));
-    }
-  }
-
-  jsize size = static_cast<jsize>(valid_spans.size());
+  jsize size = static_cast<jsize>(spans.size());
   jobjectArray spans_array =
       env->NewObjectArray(size, g_span_cache.span_class(), nullptr);
+  if (spans_array == nullptr) {
+    return nullptr;
+  }
 
-  if (spans_array != nullptr) {
-    for (jsize i = 0; i < size; ++i) {
-      env->SetObjectArrayElement(spans_array, i, valid_spans[i]);
+  jsize i = 0;
+  for (const Span& span : spans) {
+    if (ManagedJObject jspan = create_jni_span_object(env, span)) {
+      env->SetObjectArrayElement(spans_array, i++, jspan);
     }
   }
 

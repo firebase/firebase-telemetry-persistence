@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef __FIREBASE_TELEMETRY_PERSISTENCE_DETAIL_MANAGED_MMAP_POINTER_H__
-#define __FIREBASE_TELEMETRY_PERSISTENCE_DETAIL_MANAGED_MMAP_POINTER_H__
+#ifndef __FIREBASE_TELEMETRY_PERSISTENCE_DETAIL_MANAGED_MMAP_H__
+#define __FIREBASE_TELEMETRY_PERSISTENCE_DETAIL_MANAGED_MMAP_H__
 
 #include <sys/mman.h>
+#include <sys/types.h>
 
 #include <cassert>
 #include <cstddef>
@@ -137,4 +138,4 @@ bool ManagedMmap<T>::is_initialized() const {
 
 }  // namespace firebase::telemetry::persistence::detail
 
-#endif  //__FIREBASE_TELEMETRY_PERSISTENCE_DETAIL_MANAGED_MMAP_POINTER_H__
+#endif  // __FIREBASE_TELEMETRY_PERSISTENCE_DETAIL_MANAGED_MMAP_H__

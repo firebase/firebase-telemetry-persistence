@@ -82,9 +82,10 @@ void MutableSpanData::end(std::uint64_t span_id, std::uint64_t end_time) {
     detail::index_t raw_index = iterator->second;
 
     if (end_time == 0) {
-      end_time = std::chrono::duration_cast<std::chrono::nanoseconds>(
-          std::chrono::system_clock::now().time_since_epoch()
-      ).count();
+      end_time = static_cast<std::uint64_t>(
+          std::chrono::duration_cast<std::chrono::nanoseconds>(
+              std::chrono::system_clock::now().time_since_epoch()
+          ).count());
     }
 
     impl_.set_end_time(raw_index, end_time);

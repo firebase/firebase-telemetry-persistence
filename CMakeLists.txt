@@ -21,6 +21,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(ENABLE_ASAN "Enable Asan" OFF)
 option(ENABLE_FRAME_POINTER "Enable Leaks" OFF)
+option(BUILD_ANDROID_TESTS "Build unit_tests under the NDK" OFF)
 
 set(FRAME_POINTER_FLAG "-fomit-frame-pointer")
 if (ENABLE_ASAN)
@@ -42,6 +43,7 @@ add_library(firebase-telemetry-persistence-objects OBJECT
 add_library(firebase-telemetry-persistence-flags INTERFACE)
 target_compile_options(firebase-telemetry-persistence-flags INTERFACE
         -Wall -Wextra -Wpedantic -Werror
+        -Wconversion -Wsign-conversion
         -Os
         -fPIC
         -fdata-sections
@@ -91,7 +93,9 @@ if (NOT ANDROID)
             firebase-telemetry-persistence-objects
             firebase-telemetry-persistence-flags
     )
+endif ()
 
+if (NOT ANDROID OR BUILD_ANDROID_TESTS)
     include(FetchContent)
     FetchContent_Declare(
             googletest
@@ -118,6 +122,8 @@ if (NOT ANDROID)
     )
     target_link_libraries(unit_tests PRIVATE firebase-telemetry-persistence-objects GTest::gtest_main)
 
-    include(GoogleTest)
-    gtest_discover_tests(unit_tests)
+    if (NOT CMAKE_CROSSCOMPILING)
+        include(GoogleTest)
+        gtest_discover_tests(unit_tests)
+    endif ()
 endif ()

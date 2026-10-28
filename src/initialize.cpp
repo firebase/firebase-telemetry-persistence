@@ -17,9 +17,11 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include <algorithm>
+#include <cstddef>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -104,7 +106,7 @@ unspecified_context_t* initialize_span_data(const std::string& path,
     close(fd);
     return nullptr;
   }
-  std::size_t original_size = st.st_size;
+  std::size_t original_size = static_cast<std::size_t>(st.st_size);
   std::size_t required_size = get_aligned_size(target_size);
 
   std::vector<Span> recovered_spans;
@@ -136,7 +138,7 @@ unspecified_context_t* initialize_span_data(const std::string& path,
   }
 
   if (!span_data_impl.has_value()) {
-    if (ftruncate(fd, required_size) == -1) {
+    if (ftruncate(fd, static_cast<off_t>(required_size)) == -1) {
       close(fd);
       return nullptr;
     }
