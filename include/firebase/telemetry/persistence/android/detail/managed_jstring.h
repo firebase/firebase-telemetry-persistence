@@ -54,7 +54,8 @@ inline std::string jstring_to_string(JNIEnv* env, jstring src,
     return "";
   }
 
-  std::size_t len = std::max(env->GetStringUTFLength(src), 0);
+  std::size_t len =
+      static_cast<std::size_t>(std::max(env->GetStringUTFLength(src), 0));
   std::string result(utf_chars, std::min(len, max_len));
   env->ReleaseStringUTFChars(src, utf_chars);
   return result;

@@ -8,7 +8,7 @@ This library is organized to facilitate local development and cross-platform int
 
 - `include/`: Public headers for interop. These define the interface consumed by the SDKs
 - `src/`: Implementation of the library, including private headers and source files
-- `tests/`: Unit tests designed to run on a developer's machine
+- `tests/`: Unit tests designed to run on a developer's machine or an Android device
 - `main.cpp`: A scratchpad for local development and experimentation
 
 Only the core logic in `include/` and `src/` is compiled into the final production library. Development artifacts like
@@ -108,6 +108,33 @@ cmake -S . -B android-build \
 
 cmake --build android-build --target firebase-telemetry-persistence
 ```
+
+### Running Unit Tests on a Device
+
+Build `unit_tests` with the NDK by enabling `BUILD_ANDROID_TESTS`, choosing the ABI (e.g. `armeabi-v7a` or `arm64-v8a`):
+
+```shell
+ABI=armeabi-v7a
+
+cmake -S . -B android-test-$ABI \
+  -DCMAKE_TOOLCHAIN_FILE=~/Library/Android/sdk/ndk/28.2.13676358/build/cmake/android.toolchain.cmake \
+  -DANDROID_ABI=$ABI \
+  -DANDROID_PLATFORM=android-24 \
+  -DBUILD_ANDROID_TESTS=ON
+
+cmake --build android-test-$ABI --target unit_tests
+```
+
+Push the resulting binary to a device and run it from a writable directory:
+
+```shell
+adb push android-test-$ABI/unit_tests /data/local/tmp/
+adb shell "cd /data/local/tmp && ./unit_tests"
+```
+
+The device must support the chosen ABI. Check with `adb shell getprop ro.product.cpu.abilist`
+
+`ctest` is not available for cross-compiled builds since test discovery would need to run the binary on the host
 
 ### Integrating into an Android Project
 

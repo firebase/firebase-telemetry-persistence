@@ -1,8 +1,9 @@
 # Build directories
 android-build/
-cmake-build-*/
+android-test-*/
 build-*/
 build/
+cmake-build-*/
 out/
 
 # JetBrains / CLion specific

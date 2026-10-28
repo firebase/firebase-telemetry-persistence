@@ -129,7 +129,7 @@ AttributesList parse_jni_attributes(JNIEnv* env, jobjectArray attributes) {
   }
 
   jsize len = env->GetArrayLength(attributes);
-  attrs.reserve(len / 2);
+  attrs.reserve(static_cast<std::size_t>(len / 2));
 
   for (jsize i = 1; i < len; i += 2) {
     jobject key = env->GetObjectArrayElement(attributes, i - 1);
@@ -164,8 +164,9 @@ jobjectArray create_jni_span_objects_array(JNIEnv* env,
       env->NewObjectArray(size, g_span_cache.span_class(), nullptr);
 
   if (spans_array != nullptr) {
-    for (jsize i = 0; i < size; ++i) {
-      env->SetObjectArrayElement(spans_array, i, valid_spans[i]);
+    jsize i = 0;
+    for (const ManagedJObject& jspan : valid_spans) {
+      env->SetObjectArrayElement(spans_array, i++, jspan);
     }
   }
 
