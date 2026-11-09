@@ -56,7 +56,7 @@ TEST(SpanDataImplTest, MaxSpanCount) {
   ManagedMmap<Header> header = make_header(MmapSize::Large);
   SpanDataImpl span_data(std::move(header));
 
-  EXPECT_EQ(2048, span_data.max_count());
+  EXPECT_EQ(1000, span_data.max_count());
 }
 
 TEST(SpanDataImplTest, ClearSpan) {

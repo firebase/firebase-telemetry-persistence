@@ -118,7 +118,7 @@ TEST(MutableSpanDataTest, StressTest) {
   }
 
   RecoveredSpanData recovered(impl);
-  EXPECT_EQ(128, recovered.count());  // max_spans for Small size is 128
+  EXPECT_EQ(100, recovered.count());  // max_spans for Small size is 100
 
   std::uint64_t min_id = UINT64_MAX;
   std::uint64_t max_id = 0;
@@ -135,9 +135,9 @@ TEST(MutableSpanDataTest, StressTest) {
     sum_ids += id;
   }
 
-  EXPECT_EQ(273, min_id);
+  EXPECT_EQ(301, min_id);
   EXPECT_EQ(400, max_id);
-  EXPECT_EQ(43072, sum_ids);  // Expect 128 * (273 + 400) / 2
+  EXPECT_EQ(35050, sum_ids);  // Expect 100 * (301 + 400) / 2
 }
 
 TEST(MutableSpanDataTest, EndSpanSetsEndTime) {

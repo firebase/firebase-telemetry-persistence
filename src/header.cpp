@@ -21,7 +21,7 @@
 namespace firebase::telemetry::persistence::detail {
 
 // The most recent version of the header
-extern const std::uint64_t header_version = 2;
+extern const std::uint64_t header_version = 3;
 
 // A signature to identify a valid header
 extern const std::uint64_t header_signature = 0x48535243ULL;

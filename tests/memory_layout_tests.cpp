@@ -27,10 +27,10 @@ extern const std::uint64_t header_version;
 }
 
 TEST(MemoryLayoutTest, EnforceTotalSizes) {
-  EXPECT_EQ(409632, sizeof (detail::MemoryLayout<MmapSize::Small>));
-  EXPECT_EQ(12714016, sizeof (detail::MemoryLayout<MmapSize::Medium>));
-  EXPECT_EQ(50593824, sizeof (detail::MemoryLayout<MmapSize::Large>));
+  EXPECT_EQ(320032, sizeof (detail::MemoryLayout<MmapSize::Small>));
+  EXPECT_EQ(6208032, sizeof (detail::MemoryLayout<MmapSize::Medium>));
+  EXPECT_EQ(24704032, sizeof (detail::MemoryLayout<MmapSize::Large>));
 
   // If the memory layout changes, the header version must change too
-  EXPECT_EQ(2, detail::header_version);
+  EXPECT_EQ(3, detail::header_version);
 }
