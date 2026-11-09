@@ -24,6 +24,7 @@
 #include <utility>
 #include <vector>
 
+#include "firebase/telemetry/persistence/detail/header.h"
 #include "firebase/telemetry/persistence/detail/memory_layout.h"
 #include "firebase/telemetry/persistence/detail/mmap_config.h"
 #include "firebase/telemetry/persistence/detail/page_size.h"
@@ -50,11 +51,6 @@ std::size_t file_size(const char* path) {
 }
 
 void remove_file(const char* path) { std::remove(path); }
-
-namespace firebase::telemetry::persistence::detail {
-extern const std::uint64_t header_signature;
-extern const std::uint64_t header_version;
-}
 
 void write_file(const char* path, const char* content) {
   std::ofstream(path) << content;

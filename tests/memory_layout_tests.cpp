@@ -12,19 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <cstdint>
 #include <gtest/gtest.h>
 
-#include "firebase/telemetry/persistence/mmap_size.h"
+#include "firebase/telemetry/persistence/detail/header.h"
 #include "firebase/telemetry/persistence/detail/memory_layout.h"
+#include "firebase/telemetry/persistence/mmap_size.h"
 
 using namespace firebase::telemetry::persistence;
-
-namespace firebase::telemetry::persistence::detail {
-
-extern const std::uint64_t header_version;
-
-}
 
 TEST(MemoryLayoutTest, EnforceTotalSizes) {
   EXPECT_EQ(320032, sizeof (detail::MemoryLayout<MmapSize::Small>));
