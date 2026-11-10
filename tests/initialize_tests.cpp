@@ -24,6 +24,7 @@
 #include <utility>
 #include <vector>
 
+#include "firebase/telemetry/persistence/detail/header.h"
 #include "firebase/telemetry/persistence/detail/memory_layout.h"
 #include "firebase/telemetry/persistence/detail/mmap_config.h"
 #include "firebase/telemetry/persistence/detail/page_size.h"
@@ -50,10 +51,6 @@ std::size_t file_size(const char* path) {
 }
 
 void remove_file(const char* path) { std::remove(path); }
-
-namespace firebase::telemetry::persistence::detail {
-extern const std::uint64_t header_signature;
-}
 
 void write_file(const char* path, const char* content) {
   std::ofstream(path) << content;
@@ -134,7 +131,7 @@ TEST_F(InitializeTest, InitializeFromLargeCorruptFile) {
 TEST_F(InitializeTest, InitializeFromInvalidHeaderSignature) {
   Header bad_header{};
   bad_header.signature = 0xBAD00BADULL;
-  bad_header.version = 2;
+  bad_header.version = header_version;
   bad_header.mmap_size = MmapSize::Small;
   bad_header.active_span_count = 5;
   write_binary_file(mmap_file, &bad_header, sizeof(bad_header));
@@ -172,7 +169,7 @@ TEST_F(InitializeTest, InitializeFromInvalidHeaderVersion) {
 TEST_F(InitializeTest, InitializeFromInvalidMmapSizeEnum) {
   Header bad_header{};
   bad_header.signature = header_signature;
-  bad_header.version = 2;
+  bad_header.version = header_version;
   bad_header.mmap_size = static_cast<MmapSize>(255);  // Invalid enum value
   bad_header.active_span_count = 5;
   write_binary_file(mmap_file, &bad_header, sizeof(bad_header));
@@ -193,7 +190,7 @@ TEST_F(InitializeTest, InitializeFromTruncatedLayoutSize) {
   // mapped_size < layout_size
   Header header{};
   header.signature = header_signature;
-  header.version = 2;
+  header.version = header_version;
   header.mmap_size = MmapSize::Medium;
   header.active_span_count = 3;
   write_binary_file(mmap_file, &header, sizeof(header));
@@ -212,7 +209,7 @@ TEST_F(InitializeTest, InitializeFromTruncatedLayoutSize) {
 TEST_F(InitializeTest, InitializeFromZeroActiveSpans) {
   Header header{};
   header.signature = header_signature;
-  header.version = 2;
+  header.version = header_version;
   header.mmap_size = MmapSize::Small;
   header.active_span_count = 0;
   write_binary_file(mmap_file, &header, sizeof(header));
@@ -432,7 +429,7 @@ TEST_F(InitializeTest, InitializeFromOverSaturatedData) {
   // Initialize a small memory layout from the existing over saturated file
   context = initialize_span_data(mmap_file, MmapSize::Small);
 
-  // Recover all 150 spans, even though medium max spans is 128
+  // Recover all 150 spans, even though small max spans is 100
   EXPECT_EQ(150, get_recovered_spans(context).size());
 
   release_span_data(context);

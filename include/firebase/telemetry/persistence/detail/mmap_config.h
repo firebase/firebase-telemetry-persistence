@@ -33,11 +33,11 @@ template <MmapSize Size>
 constexpr MmapConfig mmap_config = []() {
   switch (Size) {
     case MmapSize::Large:
-      return MmapConfig{2048, 128};
+      return MmapConfig{1000, 128};
     case MmapSize::Medium:
-      return MmapConfig{1024, 64};
+      return MmapConfig{500, 64};
     case MmapSize::Small:
-      return MmapConfig{128, 16};
+      return MmapConfig{100, 16};
   }
 }();
 

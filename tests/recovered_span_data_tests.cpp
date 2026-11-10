@@ -29,7 +29,7 @@ TEST(RecoveredSpanDataTest, Recover) {
   RecoveredSpanData recovered_span_data(impl);
   EXPECT_EQ(1, recovered_span_data.count());
   EXPECT_GT(recovered_span_data.get_mark(0), 0);
-  EXPECT_EQ(128, recovered_span_data.max_count());
+  EXPECT_EQ(100, recovered_span_data.max_count());
 
   Span recovered = recovered_span_data.get(0);
   EXPECT_EQ("RecoverMe", recovered.name());
@@ -47,7 +47,7 @@ TEST(RecoveredSpanDataTest, RecoverMultipleSpans) {
   EXPECT_GT(recovered_span_data.get_mark(0), 0);
   EXPECT_GT(recovered_span_data.get_mark(1), 0);
   EXPECT_GT(recovered_span_data.get_mark(2), 0);
-  EXPECT_EQ(1024, recovered_span_data.max_count());
+  EXPECT_EQ(500, recovered_span_data.max_count());
 
   EXPECT_EQ(0, recovered_span_data.get_mark(3));
 

@@ -21,12 +21,6 @@
 using namespace firebase::telemetry::persistence;
 using namespace detail;
 
-namespace firebase::telemetry::persistence::detail {
-
-extern const std::uint64_t header_signature;
-
-}
-
 TEST(HeaderTest, ValidHeader) {
   ManagedMmap<Header> header = make_header(MmapSize::Small);
   reset_header(header, MmapSize::Small);

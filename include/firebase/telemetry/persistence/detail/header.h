@@ -16,11 +16,18 @@
 #define __FIREBASE_TELEMETRY_PERSISTENCE_DETAIL_HEADER_H__
 
 #include <cstddef>
+#include <cstdint>
 
 #include "firebase/telemetry/persistence/detail/managed_mmap.h"
 #include "firebase/telemetry/persistence/detail/mmap_config.h"
 
 namespace firebase::telemetry::persistence::detail {
+
+// The most recent version of the header
+inline constexpr std::uint64_t header_version = 3;
+
+// A signature to identify a valid header
+inline constexpr std::uint64_t header_signature = 0x48535243ULL;
 
 // Represents the header in the file-backed mmap data
 struct __attribute__((packed)) Header {
