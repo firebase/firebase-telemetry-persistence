@@ -33,7 +33,7 @@ namespace {
 jlong JNICALL initialize_native(JNIEnv* env, jclass /* clazz */,
                                 jstring file_path, jint size_ordinal);
 jobjectArray JNICALL recover_spans_native(JNIEnv* env, jclass /* clazz */,
-                                          jlong context_ptr);
+                                          jstring file_path);
 void JNICALL shutdown_native(JNIEnv* /* env */, jclass /* clazz */,
                              jlong context_ptr);
 void JNICALL add_span(JNIEnv* env, jobject /* thiz */, jlong context_ptr,
@@ -52,7 +52,7 @@ const JNINativeMethod persistence_methods[] = {
     {"initializeNative", "(Ljava/lang/String;I)J",
      reinterpret_cast<void *>(initialize_native)},
     {"recoverSpansNative",
-     "(J)[Lcom/google/firebase/crashlytics/telemetry/Span;",
+     "(Ljava/lang/String;)[Lcom/google/firebase/crashlytics/telemetry/Span;",
      reinterpret_cast<void *>(recover_spans_native)},
     {"shutdownNative", "(J)V", reinterpret_cast<void *>(shutdown_native)},
 };
@@ -185,12 +185,13 @@ jlong JNICALL initialize_native(JNIEnv* env, jclass /* clazz */,
 }
 
 jobjectArray JNICALL recover_spans_native(JNIEnv* env, jclass /* clazz */,
-                                          jlong context_ptr) {
-  unspecified_context_t* context =
-      reinterpret_cast<unspecified_context_t *>(context_ptr);
-  std::vector<Span> recovered_spans = get_recovered_spans(context);
+                                          jstring file_path) {
+  std::vector<Span> spans;
+  if (file_path != nullptr) {
+    spans = recover_spans(jstring_to_string(env, file_path, max_file_path_len));
+  }
 
-  return create_jni_span_objects_array(env, recovered_spans);
+  return create_jni_span_objects_array(env, spans);
 }
 
 void JNICALL shutdown_native(JNIEnv* /* env */, jclass /* clazz */,

@@ -26,9 +26,7 @@ int main() {
   Span span{{0, 0}, 271, 0, 0, 0, "", {}};
   Span span2{{0, 0}, 272, 0, 0, 0, "", {}};
 
-  unspecified_context_t* context =
-      initialize_span_data("data.mmap", MmapSize::Small);
-  std::vector<Span> recovered_spans = get_recovered_spans(context);
+  std::vector<Span> recovered_spans = recover_spans("data.mmap");
 
   std::cout << "Recovered span count: " << recovered_spans.size() << std::endl;
   for (const Span& recovered_span : recovered_spans) {
@@ -39,6 +37,8 @@ int main() {
     }
   }
 
+  unspecified_context_t* context =
+      initialize_span_data("data.mmap", MmapSize::Small);
   std::shared_ptr<MutableSpanData> mutable_span_data =
       get_mutable_span_data(context);
   if (mutable_span_data == nullptr) {

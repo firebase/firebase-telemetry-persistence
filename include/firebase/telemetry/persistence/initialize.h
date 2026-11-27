@@ -31,26 +31,27 @@ class Context;
 
 }  // namespace detail
 
-typedef detail::Context unspecified_context_t;
+using unspecified_context_t = detail::Context;
 
-// Initializes the file-backed memory mapped mutable span data
+// Recovers the active spans persisted in the file at the given path
 //
-// If a valid layout exists on disk, any active spans are recovered
-// If the existing layout size matches the requested target size, the layout is
-// reused. Otherwise, the file is resized and re-initialized to the target size
+// Returns an empty vector if the file does not exist, does not hold a valid
+// layout, or has no active spans. The file is only read, never created or
+// modified, so recovering it again returns the same spans
+std::vector<Span> recover_spans(const std::string& path);
+
+// Initializes the file-backed memory mapped mutable span data for a new session
 //
-// Returns an opaque context to the initialized environment
+// The file is created if needed, resized to the target size, and emptied. Any
+// spans still in it are discarded without being recovered. It must not be in
+// use elsewhere, because resizing it breaks any other mapping of it
+//
+// Returns an opaque context to the initialized environment, or nullptr if the
+// file could not be opened, resized, or mapped
 unspecified_context_t* initialize_span_data(const std::string& path,
                                             MmapSize target_size);
 
-// Takes the recovered spans, or returns an empty vector if there are none
-//
-// Spans can only be recovered from a context once
-std::vector<Span> get_recovered_spans(unspecified_context_t* context);
-
-// Returns the initialized mutable span data
-//
-// If mutable span data has not been initialized yet, returns nullptr
+// Returns the mutable span data, or nullptr if the context is nullptr
 std::shared_ptr<MutableSpanData> get_mutable_span_data(
     unspecified_context_t* context);
 
