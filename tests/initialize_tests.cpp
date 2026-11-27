@@ -13,15 +13,17 @@
 // limitations under the License.
 
 #include <gtest/gtest.h>
-#include <sys/stat.h>
 
-#include <cassert>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <fstream>
 #include <memory>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "firebase/telemetry/persistence/detail/header.h"
@@ -37,8 +39,8 @@ using namespace firebase::telemetry::persistence;
 using namespace detail;
 
 std::size_t required_size(MmapSize size) {
-  std::size_t page_size = detail::get_page_size();
-  std::size_t memory_layout_size = detail::get_memory_layout_size(size);
+  std::size_t page_size = get_page_size();
+  std::size_t memory_layout_size = get_memory_layout_size(size);
   return (memory_layout_size + page_size - 1) / page_size * page_size;
 }
 
@@ -50,35 +52,61 @@ std::size_t file_size(const char* path) {
   return 0;
 }
 
+bool file_exists(const char* path) {
+  struct stat st;
+  return stat(path, &st) != -1;
+}
+
 void remove_file(const char* path) { std::remove(path); }
 
 void write_file(const char* path, const char* content) {
   std::ofstream(path) << content;
 }
 
-void write_binary_file(const char* path, const void* data, std::size_t size) {
-  std::ofstream out(path, std::ios::binary);
-  out.write(reinterpret_cast<const char*>(data), size);
+Header read_header(const char* path) {
+  Header header{};
+  std::ifstream in(path, std::ios::binary);
+  in.read(reinterpret_cast<char *>(&header), sizeof (header));
+  return header;
+}
+
+// Overwrites the header in place, leaving the spans after it untouched
+void overwrite_header(const char* path, const Header& header) {
+  std::fstream out(path, std::ios::binary | std::ios::in | std::ios::out);
+  out.write(reinterpret_cast<const char *>(&header), sizeof (header));
 }
 
 class InitializeTest : public testing::Test {
 protected:
   static constexpr char mmap_file[] = "data.mmap";
+  static constexpr char other_mmap_file[] = "other.mmap";
 
-  void SetUp() override { remove_file(mmap_file); }
-  void TearDown() override { remove_file(mmap_file); }
+  void SetUp() override { remove_files(); }
+  void TearDown() override { remove_files(); }
+
+  static void remove_files() {
+    remove_file(mmap_file);
+    remove_file(other_mmap_file);
+  }
+
+  // Leaves behind a file with three active spans, as a crashed session would
+  static void persist_three_spans(MmapSize size) {
+    unspecified_context_t* context = initialize_span_data(mmap_file, size);
+
+    std::shared_ptr<MutableSpanData> span_data = get_mutable_span_data(context);
+    span_data->add(simple_span(100, "span00"));
+    span_data->add(simple_span(101, "span01"));
+    span_data->add(simple_span(102, "span02", {{"key", "value"}}));
+    EXPECT_EQ(3, span_data->count());
+
+    release_span_data(context);
+    EXPECT_EQ(nullptr, context);
+  }
 };
 
 TEST_F(InitializeTest, InitializeFromNewFile) {
   unspecified_context_t* context =
       initialize_span_data(mmap_file, MmapSize::Small);
-
-  // Expect nullptr because didn't recover yet
-  EXPECT_EQ(nullptr, get_mutable_span_data(context));
-
-  // Expect not to recover spans because file is new
-  std::vector<Span> recovered = get_recovered_spans(context);
-  EXPECT_TRUE(recovered.empty());
 
   std::shared_ptr<MutableSpanData> mutable_span_data =
       get_mutable_span_data(context);
@@ -101,267 +129,290 @@ TEST_F(InitializeTest, InitializeFromCorruptFile) {
   unspecified_context_t* context =
       initialize_span_data(mmap_file, MmapSize::Small);
 
-  // Expect nullptr because didn't recover yet
-  EXPECT_EQ(nullptr, get_mutable_span_data(context));
-
-  // Expect not to recover spans because file was corrupt
-  std::vector<Span> recovered = get_recovered_spans(context);
-  EXPECT_TRUE(recovered.empty());
-
   // Verify the header got reset
-  EXPECT_EQ(0, get_mutable_span_data(context)->count());
-
-  release_span_data(context);
-}
-
-TEST_F(InitializeTest, InitializeFromLargeCorruptFile) {
-  std::string data(8192, 'A');
-  write_file(mmap_file, data.c_str());
-
-  unspecified_context_t* context =
-      initialize_span_data(mmap_file, MmapSize::Small);
-
-  EXPECT_EQ(nullptr, get_mutable_span_data(context));
-  EXPECT_TRUE(get_recovered_spans(context).empty());
-  EXPECT_EQ(0, get_mutable_span_data(context)->count());
-
-  release_span_data(context);
-}
-
-TEST_F(InitializeTest, InitializeFromInvalidHeaderSignature) {
-  Header bad_header{};
-  bad_header.signature = 0xBAD00BADULL;
-  bad_header.version = header_version;
-  bad_header.mmap_size = MmapSize::Small;
-  bad_header.active_span_count = 5;
-  write_binary_file(mmap_file, &bad_header, sizeof(bad_header));
-
-  unspecified_context_t* context =
-      initialize_span_data(mmap_file, MmapSize::Small);
-  ASSERT_NE(nullptr, context);
-
-  // Recovery should fail gracefully due to invalid signature boundary check
-  EXPECT_TRUE(get_recovered_spans(context).empty());
-  EXPECT_EQ(0, get_mutable_span_data(context)->count());
-
-  release_span_data(context);
-}
-
-TEST_F(InitializeTest, InitializeFromInvalidHeaderVersion) {
-  Header bad_header{};
-  bad_header.signature = header_signature;
-  bad_header.version = 9999ULL;  // Unsupported future version
-  bad_header.mmap_size = MmapSize::Small;
-  bad_header.active_span_count = 5;
-  write_binary_file(mmap_file, &bad_header, sizeof(bad_header));
-
-  unspecified_context_t* context =
-      initialize_span_data(mmap_file, MmapSize::Small);
-  ASSERT_NE(nullptr, context);
-
-  // Recovery should fail gracefully due to version boundary check
-  EXPECT_TRUE(get_recovered_spans(context).empty());
-  EXPECT_EQ(0, get_mutable_span_data(context)->count());
-
-  release_span_data(context);
-}
-
-TEST_F(InitializeTest, InitializeFromInvalidMmapSizeEnum) {
-  Header bad_header{};
-  bad_header.signature = header_signature;
-  bad_header.version = header_version;
-  bad_header.mmap_size = static_cast<MmapSize>(255);  // Invalid enum value
-  bad_header.active_span_count = 5;
-  write_binary_file(mmap_file, &bad_header, sizeof(bad_header));
-
-  unspecified_context_t* context =
-      initialize_span_data(mmap_file, MmapSize::Small);
-  ASSERT_NE(nullptr, context);
-
-  // Recovery should fail gracefully due to size validation check
-  EXPECT_TRUE(get_recovered_spans(context).empty());
-  EXPECT_EQ(0, get_mutable_span_data(context)->count());
-
-  release_span_data(context);
-}
-
-TEST_F(InitializeTest, InitializeFromTruncatedLayoutSize) {
-  // Write a valid header for Medium layout, but truncate the file so
-  // mapped_size < layout_size
-  Header header{};
-  header.signature = header_signature;
-  header.version = header_version;
-  header.mmap_size = MmapSize::Medium;
-  header.active_span_count = 3;
-  write_binary_file(mmap_file, &header, sizeof(header));
-
-  unspecified_context_t* context =
-      initialize_span_data(mmap_file, MmapSize::Medium);
-  ASSERT_NE(nullptr, context);
-
-  // Recovery should fail gracefully due to mapped size boundary check
-  EXPECT_TRUE(get_recovered_spans(context).empty());
-  EXPECT_EQ(0, get_mutable_span_data(context)->count());
-
-  release_span_data(context);
-}
-
-TEST_F(InitializeTest, InitializeFromZeroActiveSpans) {
-  Header header{};
-  header.signature = header_signature;
-  header.version = header_version;
-  header.mmap_size = MmapSize::Small;
-  header.active_span_count = 0;
-  write_binary_file(mmap_file, &header, sizeof(header));
-
-  unspecified_context_t* context =
-      initialize_span_data(mmap_file, MmapSize::Small);
-  ASSERT_NE(nullptr, context);
-
-  // Recovery should be skipped because active_span_count == 0
-  EXPECT_TRUE(get_recovered_spans(context).empty());
   EXPECT_EQ(0, get_mutable_span_data(context)->count());
 
   release_span_data(context);
 }
 
 TEST_F(InitializeTest, InitializeFromExistingFile) {
-  // Set up the "existing" file
+  persist_three_spans(MmapSize::Small);
+
+  // Initialize from the existing file, without recovering it first
   unspecified_context_t* context =
       initialize_span_data(mmap_file, MmapSize::Small);
-  EXPECT_TRUE(get_recovered_spans(context).empty());
-
-  std::shared_ptr<MutableSpanData> span_data = get_mutable_span_data(context);
-  span_data->add(simple_span(100, "span00"));
-  span_data->add(simple_span(101, "span01"));
-  span_data->add(simple_span(102, "span02", {{"key", "value"}}));
-  EXPECT_EQ(3, span_data->count());
-
-  release_span_data(context);
-  EXPECT_EQ(nullptr, context);
-
-  // Initialize from the existing file
-  context = initialize_span_data(mmap_file, MmapSize::Small);
-
-  // Get the expected 3 recovered spans
-  std::vector<Span> recovered = get_recovered_spans(context);
-  EXPECT_EQ(3, recovered.size());
-  EXPECT_EQ("span00", recovered[0].name());
-  EXPECT_EQ("span01", recovered[1].name());
-  EXPECT_EQ("span02", recovered[2].name());
-  EXPECT_EQ("value", detail::get_attribute(recovered[2], "key"));
-
-  // Verify the recovered spans have been moved out of the context
-  EXPECT_TRUE(get_recovered_spans(context).empty());
 
   // Verify the header got reset
-  EXPECT_EQ(0, get_mutable_span_data(context)->count());
+  std::shared_ptr<MutableSpanData> span_data = get_mutable_span_data(context);
+  EXPECT_EQ(0, span_data->count());
 
-  // Verify the span data got cleared, otherwise this would fail an assert check
-  get_mutable_span_data(context)->add(simple_span(100));
+  // Verify the span data got cleared, otherwise adding into the slots the old
+  // spans were in would fail an assert check
+  span_data->add(simple_span(200, "span10"));
+  span_data->add(simple_span(201, "span11"));
+  span_data->add(simple_span(202, "span12"));
 
   release_span_data(context);
+
+  // Verify only the new session is left to recover
+  std::vector<Span> recovered = recover_spans(mmap_file);
+  ASSERT_EQ(3, recovered.size());
+  EXPECT_EQ("span10", recovered[0].name());
+  EXPECT_EQ("span11", recovered[1].name());
+  EXPECT_EQ("span12", recovered[2].name());
 
   EXPECT_EQ(required_size(MmapSize::Small), file_size(mmap_file));
 }
 
 TEST_F(InitializeTest, InitializeFromSmallerSize) {
-  // Set up the existing small file
-  unspecified_context_t* context =
-      initialize_span_data(mmap_file, MmapSize::Small);
-  EXPECT_TRUE(get_recovered_spans(context).empty());
-
-  std::shared_ptr<MutableSpanData> span_data = get_mutable_span_data(context);
-  span_data->add(simple_span(200, "span00"));
-  span_data->add(simple_span(201, "span01"));
-  span_data->add(simple_span(202, "span02", {{"key", "value"}}));
-  EXPECT_EQ(3, span_data->count());
-
-  release_span_data(context);
-  EXPECT_EQ(nullptr, context);
+  persist_three_spans(MmapSize::Small);
   EXPECT_EQ(required_size(MmapSize::Small), file_size(mmap_file));
 
   // Initialize a medium memory layout from the existing small file
-  context = initialize_span_data(mmap_file, MmapSize::Medium);
-
-  // Get the expected 3 recovered spans, even though they were small
-  std::vector<Span> recovered = get_recovered_spans(context);
-  EXPECT_EQ(3, recovered.size());
-  EXPECT_EQ("span00", recovered[0].name());
-  EXPECT_EQ("span01", recovered[1].name());
-  EXPECT_EQ("span02", recovered[2].name());
-  EXPECT_EQ("value", detail::get_attribute(recovered[2], "key"));
+  unspecified_context_t* context =
+      initialize_span_data(mmap_file, MmapSize::Medium);
 
   EXPECT_EQ(0, get_mutable_span_data(context)->count());
-  get_mutable_span_data(context)->add(simple_span(100));
+  get_mutable_span_data(context)->add(simple_span(200));
 
   release_span_data(context);
 
   // Verify the file got expanded to the required size for medium
   EXPECT_EQ(required_size(MmapSize::Medium), file_size(mmap_file));
+
+  // Verify the small spans were not carried over into the medium layout
+  EXPECT_EQ(1, recover_spans(mmap_file).size());
 }
 
 TEST_F(InitializeTest, InitializeFromLargerSize) {
-  // Set up the existing larger file
-  unspecified_context_t* context =
-      initialize_span_data(mmap_file, MmapSize::Medium);
-  EXPECT_TRUE(get_recovered_spans(context).empty());
-
-  std::shared_ptr<MutableSpanData> span_data = get_mutable_span_data(context);
-  span_data->add(simple_span(300, "span00"));
-  span_data->add(simple_span(301, "span01"));
-  span_data->add(simple_span(302, "span02", {{"key", "value"}}));
-  EXPECT_EQ(3, span_data->count());
-
-  release_span_data(context);
-  EXPECT_EQ(nullptr, context);
+  persist_three_spans(MmapSize::Medium);
   EXPECT_EQ(required_size(MmapSize::Medium), file_size(mmap_file));
 
   // Initialize a small memory layout from the existing medium file
-  context = initialize_span_data(mmap_file, MmapSize::Small);
+  unspecified_context_t* context =
+      initialize_span_data(mmap_file, MmapSize::Small);
 
-  // Get the expected 3 recovered spans, even though they were medium
-  std::vector<Span> recovered = get_recovered_spans(context);
-  EXPECT_EQ(3, recovered.size());
+  EXPECT_EQ(0, get_mutable_span_data(context)->count());
+  get_mutable_span_data(context)->add(simple_span(200));
+
+  release_span_data(context);
+
+  // Verify the file got truncated down to the required size for small
+  EXPECT_EQ(required_size(MmapSize::Small), file_size(mmap_file));
+
+  // Verify the medium spans were not carried over into the small layout
+  EXPECT_EQ(1, recover_spans(mmap_file).size());
+}
+
+TEST_F(InitializeTest, InitializeBadPath) {
+  unspecified_context_t* context =
+      initialize_span_data("no_such_dir/data.mmap", MmapSize::Medium);
+
+  EXPECT_EQ(nullptr, context);
+}
+
+class RecoverSpansTest : public InitializeTest {};
+
+TEST_F(RecoverSpansTest, RecoverFromMissingFile) {
+  EXPECT_TRUE(recover_spans(mmap_file).empty());
+
+  // Verify recovering did not create the file
+  EXPECT_FALSE(file_exists(mmap_file));
+}
+
+TEST_F(RecoverSpansTest, RecoverFromCorruptFile) {
+  write_file(mmap_file, "CRSH and some junk data \01 \02 \03 \04 whatevs");
+
+  EXPECT_TRUE(recover_spans(mmap_file).empty());
+}
+
+TEST_F(RecoverSpansTest, RecoverFromLargeCorruptFile) {
+  // As large as a real file, so it is the header that gets it rejected
+  std::string data(required_size(MmapSize::Small), 'A');
+  write_file(mmap_file, data.c_str());
+
+  EXPECT_TRUE(recover_spans(mmap_file).empty());
+
+  // Verify recovering did not resize or reset the corrupt file
+  EXPECT_EQ(data.size(), file_size(mmap_file));
+  EXPECT_EQ(0x4141414141414141ULL, read_header(mmap_file).signature);
+}
+
+TEST_F(RecoverSpansTest, RecoverFromInvalidHeaderSignature) {
+  persist_three_spans(MmapSize::Small);
+  ASSERT_EQ(3, recover_spans(mmap_file).size());
+
+  Header header = read_header(mmap_file);
+  header.signature = 0xBAD00BADULL;
+  overwrite_header(mmap_file, header);
+
+  EXPECT_TRUE(recover_spans(mmap_file).empty());
+}
+
+TEST_F(RecoverSpansTest, RecoverFromInvalidHeaderVersion) {
+  persist_three_spans(MmapSize::Small);
+  ASSERT_EQ(3, recover_spans(mmap_file).size());
+
+  Header header = read_header(mmap_file);
+  header.version = 9999ULL;  // Unsupported future version
+  overwrite_header(mmap_file, header);
+
+  EXPECT_TRUE(recover_spans(mmap_file).empty());
+}
+
+TEST_F(RecoverSpansTest, RecoverFromInvalidMmapSizeEnum) {
+  persist_three_spans(MmapSize::Small);
+  ASSERT_EQ(3, recover_spans(mmap_file).size());
+
+  Header header = read_header(mmap_file);
+  header.mmap_size = static_cast<MmapSize>(255);  // Invalid enum value
+  overwrite_header(mmap_file, header);
+
+  EXPECT_TRUE(recover_spans(mmap_file).empty());
+}
+
+TEST_F(RecoverSpansTest, RecoverFromTruncatedLayoutSize) {
+  persist_three_spans(MmapSize::Small);
+  ASSERT_EQ(3, recover_spans(mmap_file).size());
+
+  // Claim a medium layout in a file only big enough for a small one
+  Header header = read_header(mmap_file);
+  header.mmap_size = MmapSize::Medium;
+  overwrite_header(mmap_file, header);
+  ASSERT_LT(file_size(mmap_file), get_memory_layout_size(MmapSize::Medium));
+
+  EXPECT_TRUE(recover_spans(mmap_file).empty());
+}
+
+TEST_F(RecoverSpansTest, RecoverFromZeroActiveSpans) {
+  persist_three_spans(MmapSize::Small);
+  ASSERT_EQ(3, recover_spans(mmap_file).size());
+
+  // Zero the active count while the spans are still marked
+  Header header = read_header(mmap_file);
+  header.active_span_count = 0;
+  overwrite_header(mmap_file, header);
+
+  EXPECT_TRUE(recover_spans(mmap_file).empty());
+}
+
+TEST_F(RecoverSpansTest, RecoverFromOversizedActiveSpanCount) {
+  persist_three_spans(MmapSize::Small);
+
+  // Claim more active spans than the layout has slots
+  Header header = read_header(mmap_file);
+  header.active_span_count = UINT64_MAX;
+  overwrite_header(mmap_file, header);
+
+  // Verify the marked spans still recover, without reading past the slots
+  std::vector<Span> recovered = recover_spans(mmap_file);
+  ASSERT_EQ(3, recovered.size());
   EXPECT_EQ("span00", recovered[0].name());
   EXPECT_EQ("span01", recovered[1].name());
   EXPECT_EQ("span02", recovered[2].name());
-  EXPECT_EQ("value", detail::get_attribute(recovered[2], "key"));
-
-  EXPECT_EQ(0, get_mutable_span_data(context)->count());
-  get_mutable_span_data(context)->add(simple_span(100));
-
-  release_span_data(context);
-
-  // Verify the file got truncated down to the required size for small
-  EXPECT_EQ(required_size(MmapSize::Small), file_size(mmap_file));
 }
 
-TEST_F(InitializeTest, InitializeFromLargerSizeNoSpans) {
-  // Set up the existing larger file but don't write any spans to it
-  unspecified_context_t* context =
-      initialize_span_data(mmap_file, MmapSize::Medium);
-  EXPECT_TRUE(get_recovered_spans(context).empty());
-
-  release_span_data(context);
-  EXPECT_EQ(nullptr, context);
-  EXPECT_EQ(required_size(MmapSize::Medium), file_size(mmap_file));
-
-  // Initialize a small memory layout from the existing medium file
-  context = initialize_span_data(mmap_file, MmapSize::Small);
-  EXPECT_TRUE(get_recovered_spans(context).empty());
-
-  release_span_data(context);
-
-  // Verify the file got truncated down to the required size for small
-  EXPECT_EQ(required_size(MmapSize::Small), file_size(mmap_file));
-}
-
-TEST_F(InitializeTest, InitializeFromSparceData) {
-  // Set up the existing file and make it sparce by adding a gap between spans
+TEST_F(RecoverSpansTest, RecoverFromInitializedFile) {
+  // Set up a file that was initialized but never had a span added
   unspecified_context_t* context =
       initialize_span_data(mmap_file, MmapSize::Small);
-  EXPECT_TRUE(get_recovered_spans(context).empty());
+  release_span_data(context);
+
+  EXPECT_TRUE(recover_spans(mmap_file).empty());
+}
+
+TEST_F(RecoverSpansTest, RecoverFromExistingFile) {
+  persist_three_spans(MmapSize::Small);
+
+  // Get the expected 3 recovered spans
+  std::vector<Span> recovered = recover_spans(mmap_file);
+  ASSERT_EQ(3, recovered.size());
+  EXPECT_EQ("span00", recovered[0].name());
+  EXPECT_EQ("span01", recovered[1].name());
+  EXPECT_EQ("span02", recovered[2].name());
+  EXPECT_EQ("value", get_attribute(recovered[2], "key"));
+
+  // Verify recovering left the file as it was, so it can be recovered again
+  EXPECT_EQ(3, recover_spans(mmap_file).size());
+  EXPECT_EQ(required_size(MmapSize::Small), file_size(mmap_file));
+}
+
+TEST_F(RecoverSpansTest, RecoverFromUnalignedFileSize) {
+  persist_three_spans(MmapSize::Small);
+
+  // Shrink the file to the smallest size that still holds the layout and does
+  // not end on a page boundary
+  std::size_t unaligned_size = get_memory_layout_size(MmapSize::Small);
+  if (unaligned_size % get_page_size() == 0) {
+    unaligned_size += 1;
+  }
+  ASSERT_EQ(0, truncate(mmap_file, static_cast<off_t>(unaligned_size)));
+  ASSERT_EQ(unaligned_size, file_size(mmap_file));
+
+  // Verify the spans still recover, because only the layout has to fit
+  std::vector<Span> recovered = recover_spans(mmap_file);
+  ASSERT_EQ(3, recovered.size());
+  EXPECT_EQ("span00", recovered[0].name());
+  EXPECT_EQ("span01", recovered[1].name());
+  EXPECT_EQ("span02", recovered[2].name());
+  EXPECT_EQ("value", get_attribute(recovered[2], "key"));
+}
+
+TEST_F(RecoverSpansTest, RecoverThenInitialize) {
+  persist_three_spans(MmapSize::Small);
+  EXPECT_EQ(3, recover_spans(mmap_file).size());
+
+  // Reuse the recovered file for a new session
+  unspecified_context_t* context =
+      initialize_span_data(mmap_file, MmapSize::Small);
+
+  // Verify initializing emptied the file, so recovering it now is too late
+  EXPECT_TRUE(recover_spans(mmap_file).empty());
+
+  release_span_data(context);
+}
+
+TEST_F(RecoverSpansTest, RecoverFromSeparateFile) {
+  persist_three_spans(MmapSize::Small);
+
+  // Start a new session in a different file from the one left to recover
+  unspecified_context_t* context =
+      initialize_span_data(other_mmap_file, MmapSize::Small);
+  get_mutable_span_data(context)->add(simple_span(200, "span10"));
+
+  // Verify the new session did not disturb the file left to recover
+  std::vector<Span> recovered = recover_spans(mmap_file);
+  ASSERT_EQ(3, recovered.size());
+  EXPECT_EQ("span00", recovered[0].name());
+  EXPECT_EQ("span01", recovered[1].name());
+  EXPECT_EQ("span02", recovered[2].name());
+
+  // Verify recovering did not disturb the new session
+  EXPECT_EQ(1, get_mutable_span_data(context)->count());
+
+  release_span_data(context);
+}
+
+TEST_F(RecoverSpansTest, RecoverFromMediumSize) {
+  // Set up a medium file with 150 spans, more than a small layout can hold
+  unspecified_context_t* context =
+      initialize_span_data(mmap_file, MmapSize::Medium);
+
+  std::shared_ptr<MutableSpanData> span_data = get_mutable_span_data(context);
+  for (int i = 1; i <= 150; ++i) {
+    span_data->add(simple_span(i));
+  }
+
+  release_span_data(context);
+
+  // Recover all 150 spans, because the layout comes from the file's header
+  EXPECT_EQ(150, recover_spans(mmap_file).size());
+}
+
+TEST_F(RecoverSpansTest, RecoverFromSparseData) {
+  // Set up the existing file and make it sparse by adding a gap between spans
+  unspecified_context_t* context =
+      initialize_span_data(mmap_file, MmapSize::Small);
 
   std::shared_ptr<MutableSpanData> span_data = get_mutable_span_data(context);
   span_data->add(simple_span(200, "span00"));
@@ -374,112 +425,53 @@ TEST_F(InitializeTest, InitializeFromSparceData) {
 
   release_span_data(context);
 
-  // Initialize a medium memory layout from the existing sparce file
-  context = initialize_span_data(mmap_file, MmapSize::Small);
-
   // Get the expected 2 recovered spans, with the middle span removed
-  std::vector<Span> recovered = get_recovered_spans(context);
-  EXPECT_EQ(2, recovered.size());
+  std::vector<Span> recovered = recover_spans(mmap_file);
+  ASSERT_EQ(2, recovered.size());
   EXPECT_EQ("span00", recovered[0].name());
   EXPECT_EQ("span02", recovered[1].name());
-  EXPECT_EQ("value", detail::get_attribute(recovered[1], "key"));
-
-  release_span_data(context);
+  EXPECT_EQ("value", get_attribute(recovered[1], "key"));
 }
 
-TEST_F(InitializeTest, InitializeFromSaturatedData) {
+TEST_F(RecoverSpansTest, RecoverFromSaturatedData) {
   // Set up the existing file and saturate it with max spans
   unspecified_context_t* context =
       initialize_span_data(mmap_file, MmapSize::Small);
-  EXPECT_TRUE(get_recovered_spans(context).empty());
 
   std::shared_ptr<MutableSpanData> span_data = get_mutable_span_data(context);
-  std::uint64_t max_spans = detail::mmap_config<MmapSize::Small>.max_spans;
+  std::uint64_t max_spans = mmap_config<MmapSize::Small>.max_spans;
   for (int i = 1; i <= max_spans; ++i) {
     span_data->add(simple_span(i));
   }
 
   release_span_data(context);
 
-  // Initialize from the existing saturated file
-  context = initialize_span_data(mmap_file, MmapSize::Small);
-
   // Recover all max_spans spans
-  std::vector<Span> recovered = get_recovered_spans(context);
-  EXPECT_EQ(max_spans, recovered.size());
+  std::vector<Span> recovered = recover_spans(mmap_file);
+  ASSERT_EQ(max_spans, recovered.size());
   EXPECT_EQ(1, recovered[0].span_id());
   EXPECT_EQ(max_spans, recovered[max_spans - 1].span_id());
-
-  release_span_data(context);
-}
-
-TEST_F(InitializeTest, InitializeFromOverSaturatedData) {
-  // Set up the existing file and saturate it with 150 spans
-  unspecified_context_t* context =
-      initialize_span_data(mmap_file, MmapSize::Medium);
-  EXPECT_TRUE(get_recovered_spans(context).empty());
-
-  std::shared_ptr<MutableSpanData> span_data = get_mutable_span_data(context);
-  for (int i = 1; i <= 150; ++i) {
-    span_data->add(simple_span(i));
-  }
-
-  release_span_data(context);
-
-  // Initialize a small memory layout from the existing over saturated file
-  context = initialize_span_data(mmap_file, MmapSize::Small);
-
-  // Recover all 150 spans, even though small max spans is 100
-  EXPECT_EQ(150, get_recovered_spans(context).size());
-
-  release_span_data(context);
-}
-
-TEST_F(InitializeTest, InitializeBadPath) {
-  unspecified_context_t* context =
-      initialize_span_data("/usr/bin/su", MmapSize::Medium);
-
-  EXPECT_EQ(nullptr, context);
-}
-
-TEST_F(InitializeTest, InitializeTwiceNoOp) {
-  unspecified_context_t* context1 =
-      initialize_span_data(mmap_file, MmapSize::Small);
-  unspecified_context_t* context2 =
-      initialize_span_data(mmap_file, MmapSize::Medium);
-
-  EXPECT_NE(context1, context2);
-
-  EXPECT_TRUE(get_recovered_spans(context1).empty());
-  EXPECT_TRUE(get_recovered_spans(context2).empty());
-
-  EXPECT_EQ(0, get_mutable_span_data(context1)->count());
-  EXPECT_EQ(0, get_mutable_span_data(context2)->count());
-
-  release_span_data(context1);
-  release_span_data(context2);
 }
 
 class InitializeDeathTest : public InitializeTest {};
 
-TEST_F(InitializeDeathTest, InitializeTwiceRecoveryDeathTest) {
+TEST_F(InitializeDeathTest, InitializeTwiceDeathTest) {
   // Setup first initialize on this file
   unspecified_context_t* context1 =
       initialize_span_data(mmap_file, MmapSize::Small);
 
-  EXPECT_TRUE(get_recovered_spans(context1).empty());
-
   std::shared_ptr<MutableSpanData> span_data1 = get_mutable_span_data(context1);
   span_data1->add(simple_span(100));
   span_data1->add(simple_span(101));
+
+  // Verify spans can recover while the first context is still using the file
+  EXPECT_EQ(2, recover_spans(mmap_file).size());
 
   // Setup second initialize on this same file
   unspecified_context_t* context2 =
       initialize_span_data(mmap_file, MmapSize::Small);
 
   EXPECT_NE(context1, context2);
-
-  EXPECT_EQ(2, get_recovered_spans(context2).size());
 
   // Expected to die because span_data1 tries to remove span 100 from slot 0,
   // but context2 has already cleared slot 0

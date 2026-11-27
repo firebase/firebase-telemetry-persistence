@@ -23,16 +23,20 @@
 #include <algorithm>
 #include <cstddef>
 #include <memory>
-#include <optional>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include "firebase/telemetry/persistence/detail/header.h"
+#include "firebase/telemetry/persistence/detail/managed_mmap.h"
 #include "firebase/telemetry/persistence/detail/memory_layout.h"
 #include "firebase/telemetry/persistence/detail/page_size.h"
 #include "firebase/telemetry/persistence/detail/span_data_impl.h"
 #include "firebase/telemetry/persistence/detail/types.h"
+#include "firebase/telemetry/persistence/mmap_size.h"
 #include "firebase/telemetry/persistence/mutable_span_data.h"
 #include "firebase/telemetry/persistence/recovered_span_data.h"
+#include "firebase/telemetry/persistence/span.h"
 
 namespace firebase::telemetry::persistence {
 
@@ -58,41 +62,74 @@ bool should_do_recovery(const detail::ManagedMmap<detail::Header>& header,
   return header->active_span_count > 0;
 }
 
+std::vector<Span> copy_marked_spans(
+    const detail::SpanDataImpl& span_data_impl) {
+  RecoveredSpanData recovered_span_data(span_data_impl);
+
+  // A corrupt header can claim more spans than the layout has slots
+  detail::index_t count = std::min<detail::index_t>(
+      recovered_span_data.count(), recovered_span_data.max_count());
+
+  std::vector<Span> spans;
+  for (detail::index_t i = 0; i < count; ++i) {
+    if (recovered_span_data.get_mark(i)) {
+      spans.push_back(recovered_span_data.get(i));
+    }
+  }
+  return spans;
+}
+
 }  // namespace
 
 namespace detail {
 
 class Context {
 public:
-  explicit Context(SpanDataImpl span_data_impl,
-                   std::vector<Span> recovered_spans)
+  explicit Context(SpanDataImpl span_data_impl)
       : span_data_impl_(std::move(span_data_impl)),
-        recovered_spans_(std::move(recovered_spans)),
-        is_recovered_(false),
         mutable_span_data_(std::make_shared<MutableSpanData>(span_data_impl_)) {
-    span_data_impl_.remove_all();
   }
-
-  bool is_recovered() const { return is_recovered_; }
 
   std::shared_ptr<MutableSpanData> mutable_span_data() {
     return mutable_span_data_;
   }
 
-  std::vector<Span> take_recovered_spans() {
-    is_recovered_ = true;
-    return std::move(recovered_spans_);
-  }
-
 private:
   SpanDataImpl span_data_impl_;
-
-  std::vector<Span> recovered_spans_;
-  bool is_recovered_;
   std::shared_ptr<MutableSpanData> mutable_span_data_;
 };
 
 }  // namespace detail
+
+std::vector<Span> recover_spans(const std::string& path) {
+  int fd = open(path.c_str(), O_RDONLY);
+  if (fd == -1) {
+    return {};
+  }
+
+  struct stat st;
+  if (fstat(fd, &st) == -1) {
+    close(fd);
+    return {};
+  }
+  std::size_t file_size = static_cast<std::size_t>(st.st_size);
+
+  // An initialized file can never be smaller than a page
+  if (file_size < detail::get_page_size()) {
+    close(fd);
+    return {};
+  }
+
+  detail::ManagedMmap<detail::Header> header(
+      nullptr, file_size, PROT_READ, MAP_SHARED, fd, 0);
+  close(fd);
+
+  if (!should_do_recovery(header, file_size)) {
+    return {};
+  }
+
+  return copy_marked_spans(detail::SpanDataImpl(std::move(header)));
+}
 
 unspecified_context_t* initialize_span_data(const std::string& path,
                                             MmapSize target_size) {
@@ -101,77 +138,31 @@ unspecified_context_t* initialize_span_data(const std::string& path,
     return nullptr;
   }
 
-  struct stat st;
-  if (fstat(fd, &st) == -1) {
+  std::size_t required_size = get_aligned_size(target_size);
+  if (ftruncate(fd, static_cast<off_t>(required_size)) == -1) {
     close(fd);
     return nullptr;
   }
-  std::size_t original_size = static_cast<std::size_t>(st.st_size);
-  std::size_t required_size = get_aligned_size(target_size);
 
-  std::vector<Span> recovered_spans;
-  std::optional<detail::SpanDataImpl> span_data_impl;
-
-  if (original_size >= detail::get_page_size()) {
-    detail::ManagedMmap<detail::Header> header(
-        nullptr, original_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-
-    if (!header.is_initialized()) {
-      close(fd);
-      return nullptr;
-    }
-
-    if (should_do_recovery(header, original_size)) {
-      detail::SpanDataImpl temp_impl(std::move(header));
-      RecoveredSpanData recovered_span_data(temp_impl);
-      for (detail::index_t i = 0; i < recovered_span_data.count(); ++i) {
-        if (recovered_span_data.get_mark(i)) {
-          recovered_spans.push_back(recovered_span_data.get(i));
-        }
-      }
-
-      // If the layout matches the target size, reuse this mapping
-      if (temp_impl.size() == target_size && original_size == required_size) {
-        span_data_impl.emplace(std::move(temp_impl));
-      }
-    }
-  }
-
-  if (!span_data_impl.has_value()) {
-    if (ftruncate(fd, static_cast<off_t>(required_size)) == -1) {
-      close(fd);
-      return nullptr;
-    }
-
-    detail::ManagedMmap<detail::Header> header(
-        nullptr, required_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-
-    if (!header.is_initialized()) {
-      close(fd);
-      return nullptr;
-    }
-
-    reset_header(header, target_size);
-    span_data_impl.emplace(std::move(header));
-  }
-
+  detail::ManagedMmap<detail::Header> header(
+      nullptr, required_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
   close(fd);
 
-  return new detail::Context(std::move(*span_data_impl),
-                             std::move(recovered_spans));
-}
-
-std::vector<Span> get_recovered_spans(unspecified_context_t* context) {
-  if (context == nullptr || context->is_recovered()) {
-    return {};
+  if (!header.is_initialized()) {
+    return nullptr;
   }
 
-  return context->take_recovered_spans();
+  // Reset the header first, so old spans never recover under the new layout
+  reset_header(header, target_size);
+  detail::SpanDataImpl span_data_impl(std::move(header));
+  span_data_impl.remove_all();
+
+  return new detail::Context(std::move(span_data_impl));
 }
 
 std::shared_ptr<MutableSpanData> get_mutable_span_data(
     unspecified_context_t* context) {
-  if (context == nullptr || !context->is_recovered()) {
+  if (context == nullptr) {
     return nullptr;
   }
 
