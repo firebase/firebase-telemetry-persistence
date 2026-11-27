@@ -15,6 +15,8 @@
 #include <gtest/gtest.h>
 
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -37,8 +39,8 @@ using namespace firebase::telemetry::persistence;
 using namespace detail;
 
 std::size_t required_size(MmapSize size) {
-  std::size_t page_size = detail::get_page_size();
-  std::size_t memory_layout_size = detail::get_memory_layout_size(size);
+  std::size_t page_size = get_page_size();
+  std::size_t memory_layout_size = get_memory_layout_size(size);
   return (memory_layout_size + page_size - 1) / page_size * page_size;
 }
 
@@ -328,11 +330,32 @@ TEST_F(RecoverSpansTest, RecoverFromExistingFile) {
   EXPECT_EQ("span00", recovered[0].name());
   EXPECT_EQ("span01", recovered[1].name());
   EXPECT_EQ("span02", recovered[2].name());
-  EXPECT_EQ("value", detail::get_attribute(recovered[2], "key"));
+  EXPECT_EQ("value", get_attribute(recovered[2], "key"));
 
   // Verify recovering left the file as it was, so it can be recovered again
   EXPECT_EQ(3, recover_spans(mmap_file).size());
   EXPECT_EQ(required_size(MmapSize::Small), file_size(mmap_file));
+}
+
+TEST_F(RecoverSpansTest, RecoverFromUnalignedFileSize) {
+  persist_three_spans(MmapSize::Small);
+
+  // Shrink the file to the smallest size that still holds the layout and does
+  // not end on a page boundary
+  std::size_t unaligned_size = get_memory_layout_size(MmapSize::Small);
+  if (unaligned_size % get_page_size() == 0) {
+    unaligned_size += 1;
+  }
+  ASSERT_EQ(0, truncate(mmap_file, static_cast<off_t>(unaligned_size)));
+  ASSERT_EQ(unaligned_size, file_size(mmap_file));
+
+  // Verify the spans still recover, because only the layout has to fit
+  std::vector<Span> recovered = recover_spans(mmap_file);
+  ASSERT_EQ(3, recovered.size());
+  EXPECT_EQ("span00", recovered[0].name());
+  EXPECT_EQ("span01", recovered[1].name());
+  EXPECT_EQ("span02", recovered[2].name());
+  EXPECT_EQ("value", get_attribute(recovered[2], "key"));
 }
 
 TEST_F(RecoverSpansTest, RecoverThenInitialize) {
@@ -407,7 +430,7 @@ TEST_F(RecoverSpansTest, RecoverFromSparseData) {
   ASSERT_EQ(2, recovered.size());
   EXPECT_EQ("span00", recovered[0].name());
   EXPECT_EQ("span02", recovered[1].name());
-  EXPECT_EQ("value", detail::get_attribute(recovered[1], "key"));
+  EXPECT_EQ("value", get_attribute(recovered[1], "key"));
 }
 
 TEST_F(RecoverSpansTest, RecoverFromSaturatedData) {
@@ -416,7 +439,7 @@ TEST_F(RecoverSpansTest, RecoverFromSaturatedData) {
       initialize_span_data(mmap_file, MmapSize::Small);
 
   std::shared_ptr<MutableSpanData> span_data = get_mutable_span_data(context);
-  std::uint64_t max_spans = detail::mmap_config<MmapSize::Small>.max_spans;
+  std::uint64_t max_spans = mmap_config<MmapSize::Small>.max_spans;
   for (int i = 1; i <= max_spans; ++i) {
     span_data->add(simple_span(i));
   }
